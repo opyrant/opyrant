@@ -15,12 +15,16 @@ class PySerialInterface(base_.BaseInterface):
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
+
+
+    Still need to fix polling, but I need to see what it needs to do.
     """
-    def __init__(self,device_name,*args,baud_rate=9600,**kwargs):
+    def __init__(self,device_name,baud_rate=9600,*args,**kwargs):
         super(PySerialInterface, self).__init__(*args,**kwargs)
         self.device_name = device_name
         self.read_params = ('channel',
                             )
+        self.inverted_channels = list()
         self.baud_rate = baud_rate
         self.open()
 
@@ -33,6 +37,7 @@ class PySerialInterface(base_.BaseInterface):
         self.device = serial.Serial(self.device_name, self.baud_rate)
         if self.device is None:
             raise InterfaceError('could not open serial device %s' % self.device_name)
+        utils.wait(1.5)
 
     def close(self):
         '''Close a serial connection for the device
@@ -41,13 +46,20 @@ class PySerialInterface(base_.BaseInterface):
 
         self.device.close()
 
-    def _config_read(self,channel):
+    def _config_read(self,channel,pullup=False):
         ''' Configure the channel to act as an input
         :param channel: the channel number to configure
         :return: None
         '''
 
-        self.device.write(self._make_arg(channel, 4))
+        if pullup is False:
+            self.device.write(self._make_arg(channel, 4))
+            if channel in self.inverted_channels:
+                self.inverted_channels.remove(channel)
+        else:
+            self.device.write(self._make_arg(channel, 5))
+            if channel not in self.inverted_channels:
+                self.inverted_channels.append(channel)
 
     def _config_write(self,channel):
         ''' Configure the channel to act as an output
@@ -65,8 +77,10 @@ class PySerialInterface(base_.BaseInterface):
 
         self.device.write(self._make_arg(channel, 0))
         v = ord(self.device.read()) # Read hangs until the values are read. Not sure how to work with this
-        if v:
-            return v
+        if v in [0, 1]:
+            if channel in self.inverted_channels:
+                v = 1 - v
+            return v == 1
         else:
             raise InterfaceError('could not read from serial device "%s", channel %d' % (self.device,channel))
 
@@ -80,7 +94,7 @@ class PySerialInterface(base_.BaseInterface):
         '''Write a value to the specified channel
         :param channel: the channel to write to
         :param value: the value to write
-        :return: True if write succeeded
+        :return: value written if succeeded
         '''
 
         if value:
@@ -88,7 +102,7 @@ class PySerialInterface(base_.BaseInterface):
         else:
             s = self.device.write(self._make_arg(channel, 2))
         if s:
-            return True
+            return value
         else:
             raise InterfaceError('could not write to serial device "%s", channel %d' % (self.device,channel))
 
