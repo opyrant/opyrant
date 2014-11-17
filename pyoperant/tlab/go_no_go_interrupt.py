@@ -7,7 +7,7 @@ import csv
 import copy
 import datetime as dt
 import random
-import ipdb
+# import ipdb
 from pyoperant.behavior import base, shape
 from pyoperant.errors import EndSession
 from pyoperant import components, utils, reinf, queues
@@ -413,7 +413,7 @@ class GoNoGoInterrupt(base.BaseExp):
             self.schedule_next_session()
             self.log.info("Next session scheduled to start at %s" % self.parameters["session_schedule"][0][0])
         else:
-            self.log.info("Finished all sessions. Going to sleep")
+            self.log.info("Finished all sessions.")
 
 
 
@@ -425,7 +425,7 @@ if __name__ == "__main__":
     from pyoperant.tlab.go_no_go_interrupt import GoNoGoInterrupt
 
     #cmd_line = utils.parse_commandline()
-    config_file = "/Users/tylerlee/code/pyoperant/pyoperant/tlab/go_no_go_interrupt_config.json"
+    config_file = "/home/tlee/Data/code/pyoperant/pyoperant/tlab/go_no_go_interrupt_config.json"
     with open(config_file, 'rb') as config:
             parameters = json.load(config)
 
@@ -437,11 +437,11 @@ if __name__ == "__main__":
 
     panel = PANELS[parameters['panel_name']]()
     if isinstance(parameters["session_schedule"], list):
-        if isinstance(parameters["session_schedule"][0], unicode):
+        if isinstance(parameters["session_schedule"][0], (unicode, str)):
             parameters["session_schedule"] = [tuple(parameters["session_schedule"])]
     if isinstance(parameters["light_schedule"], list):
-        if isinstance(parameters["light_schedule"][0], unicode):
+        if isinstance(parameters["light_schedule"][0], (unicode, str)):
             parameters["light_schedule"] = [tuple(parameters["light_schedule"])]
 
-    exp = GoNoGoInterrupt(panel=panel,**parameters)
+    exp = GoNoGoInterrupt(panel=panel, **parameters)
     exp.run()

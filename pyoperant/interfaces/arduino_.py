@@ -40,7 +40,8 @@ class ArduinoInterface(base_.BaseInterface):
         self.device = serial.Serial(self.device_name, self.baud_rate)
         if self.device is None:
             raise InterfaceError('could not open serial device %s' % self.device_name)
-        self.device.readline()
+        # self.device.readline()
+        utils.wait(1.5)
 
     def close(self):
         '''Close a serial connection for the device
@@ -132,5 +133,5 @@ class ArduinoInterface(base_.BaseInterface):
 
     def _make_arg(self, channel, value):
 
-        return [chr(channel), chr(value)]
+        return "".join([chr(channel), chr(value)])
 
