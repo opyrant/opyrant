@@ -1,5 +1,6 @@
 import random
 
+
 def random_queue(conditions,tr_max=100,weights=None):
     """ generator which randomly samples conditions
 
@@ -18,7 +19,7 @@ def random_queue(conditions,tr_max=100,weights=None):
         conditions_weighted = []
         for cond,w in zip(conditions,weights):
             for ww in range(w):
-                conditions_weighted += cond
+                conditions_weighted += [cond]
         conditions = conditions_weighted
 
     tr_num = 0

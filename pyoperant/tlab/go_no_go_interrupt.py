@@ -1,9 +1,13 @@
 #!/usr/local/bin/python
 
 import os
+import sys
+import logging
 import csv
 import copy
 import datetime as dt
+import random
+import ipdb
 from pyoperant.behavior import base, shape
 from pyoperant.errors import EndSession
 from pyoperant import components, utils, reinf, queues
@@ -14,7 +18,14 @@ class GoNoGoInterrupt(base.BaseExp):
 
     Parameters
     ----------
-
+    stim_path
+    subject
+    experiment_path
+    session_schedule
+    go_probability
+    session_duration
+    intersession_interval
+    num_sessions
 
     Attributes
     ----------
@@ -39,70 +50,64 @@ class GoNoGoInterrupt(base.BaseExp):
     def __init__(self, *args, **kwargs):
 
         super(GoNoGoInterrupt,  self).__init__(*args, **kwargs)
-        # self.shaper = shape.Shaper2AC(self.panel, self.log, self.parameters, self.log_error_callback) # Need a shaper protocol
 
-        # Replaces the relative pathname of each stimulus with its absolute pathname
-        for name, filename in self.parameters['stims'].items():
-            filename_full = os.path.join(self.parameters['stim_path'], filename)
-            self.parameters['stims'][name] = filename_full
+        stdhandler = logging.StreamHandler(sys.stdout)
+        stdhandler.setLevel(self.log_level)
+        stdhandler.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
+        self.log.addHandler(stdhandler)
+
+        # Set the shaping protocol
+        self.shaper = shape.Shaper2AC(self.panel, self.log, self.parameters, self.log_error_callback) # Need a shaper protocol
 
         # Which components must be present in the panel
-        self.req_panel_attr += ['speaker',
-                                'center',
-                                'reward',
-                                ]
+        self.req_panel_attr.extend(['speaker', 'response_port', 'reward'])
 
         # Columns for the CSV file where data is written
         self.fields_to_save = ['session',
                                'index',
-                               'type_',
+                               'time',
                                'stimulus',
                                'class_',
                                'response',
                                'correct',
                                'rt',
-                               'time',
+                               'reward',
+                               'max_wait',
                                ]
 
-        # Presumably "add_fields_to_save" is a list with additional fields to save
-        if 'add_fields_to_save' in self.parameters.keys():
-            self.fields_to_save += self.parameters['add_fields_to_save']
+        # The output file where data should be written
+        csv_filename = "%s_trialdata_%s.csv" % (self.parameters["subject"], self.timestamp)
+        self.data_csv = os.path.join(self.parameters['experiment_path'], csv_filename)
+
+        # This sets up the reinforcement schedule. Defaults to continuous where every correct trial is rewarded
+        self.reinf_sched = reinf.ContinuousReinforcement()
+
+        # Add weights to random queue to adjust the probability of a go stim
+        default_block = dict(queue="random",
+                             conditions=[{"class": "Go"},
+                                         {"class": "NoGo"}],
+                             tr_max=400,
+                             weights=[int(400 * self.parameters["go_probability"]), int(400 * (1 - self.parameters["go_probability"]))])
+        blocks = dict(default=default_block)
+        self.parameters["block_design"] = dict(blocks=blocks,
+                                               order=["default"])
+
+        self.parameters["stims"] = dict()
+        stim_path = os.path.join(self.parameters["stim_path"], "go")
+        self.parameters["stims"]["Go"] = map(lambda fname: os.path.join(stim_path, fname), os.listdir(stim_path))
+        stim_path = os.path.join(self.parameters["stim_path"], "nogo")
+        self.parameters["stims"]["NoGo"] = map(lambda fname: os.path.join(stim_path, fname), os.listdir(stim_path))
 
         # Initialize some parameters
         self.trials = []
-        # Why is session_id set to 0?
         self.session_id = 0
-        # Why are the queues set to None?
-        self.trial_q = None
-        self.session_q = None
-        # The output file where data should be written... Why is this just set now??
-        self.data_csv = os.path.join(self.parameters['experiment_path'],
-                                     self.parameters['subject']+'_trialdata_'+self.timestamp+'.csv')
 
-        # This sets up the reinforcement schedule. Defaults to continuous where every correct trial is rewarded
-        reinforcement = self.parameters['reinforcement']
-        if "reinforcement" in self.parameters.keys():
-            if reinforcement['schedule'] == 'variable_ratio':
-                self.reinf_sched = reinf.VariableRatioSchedule(ratio=reinforcement['ratio'])
-            elif reinf['schedule'] == 'fixed_ratio':
-                self.reinf_sched = reinf.FixedRatioSchedule(ratio=reinforcement['ratio'])
-            else:
-                self.reinf_sched = reinf.ContinuousReinforcement()
-        else:
-            self.reinf_sched = reinf.ContinuousReinforcement()
+        #Initialize the queues as None. They will be created as iterators in session_main()
+        self.trial_queue = None
+        self.session_queue = None
 
-        # This sets the only block to be a random block, which is, I think, what we want.
-        if 'block_design' not in self.parameters:
-            self.parameters['block_design'] = {
-                'blocks': {
-                    'default': {
-                        'queue': 'random',
-                        'conditions': [{'class': k} for k in self.parameters['classes'].keys()]
-                    }
-                },
-                'order': ['default']
-            }
-
+        # Initialize data CSV
+        self.log.debug("Initializing CSV file to output data: %s" % self.data_csv)
         self.make_data_csv()
 
     def make_data_csv(self):
@@ -115,32 +120,38 @@ class GoNoGoInterrupt(base.BaseExp):
             trialWriter = csv.writer(data_fh)
             trialWriter.writerow(self.fields_to_save)
 
-    ## session flow
-    # def check_session_schedule(self):
-    #     """ Check the session schedule
-    #
-    #     Returns
-    #     -------
-    #     bool
-    #         True if sessions should be running
-    #     """
-    #     return self.check_light_schedule()
+    def check_session_schedule(self):
+        """ Check the session schedule
 
+        Returns
+        -------
+        bool
+            True if sessions should be running
+        """
+        if len(self.parameters["session_schedule"]):
+            return utils.check_time(self.parameters['session_schedule'])
+        else:
+            return False
+
+    def schedule_current_session(self):
+
+        current_time = dt.datetime.now()
+        stop_time = current_time + dt.timedelta(minutes=self.parameters["session_duration"])
+        self.parameters["session_schedule"] = [(current_time.strftime("%H:%M"), stop_time.strftime("%H:%M"))]
+        self.session_end_time = stop_time
+
+    def schedule_next_session(self):
+
+        current_time = dt.datetime.now()
+        start_time = current_time + dt.timedelta(minutes=self.parameters["intersession_interval"])
+        stop_time = current_time - dt.timedelta(minutes=1)
+        self.parameters["session_schedule"] = [(start_time.strftime("%H:%M"), stop_time.strftime("%H:%M"))]
+
+    ## Session Flow
     def session_pre(self):
         """ Runs before the session starts
-
-        For each stimulus class, if there is a component associated with it, that
-        component is mapped onto `experiment.class_assoc[class]`. For example,
-        if the `left` port is registered with the 'L' class, you can access the response
-        port through `experiment.class_assoc['L']`.
-
         """
-        self.class_assoc = {}
-        for class_, class_params in self.parameters['classes'].items():
-            try:
-                self.class_assoc[class_] = getattr(self.panel, class_params['component'])
-            except KeyError:
-                pass
+        self.log.debug("Beginning session")
 
         return 'main'
 
@@ -154,52 +165,66 @@ class GoNoGoInterrupt(base.BaseExp):
         """
 
         def run_trial_queue():
-            for tr_cond in self.trial_q:
+            for tr_cond in self.trial_queue:
                 self.new_trial(tr_cond)
                 self.run_trial()
-                while self.do_correction:
-                    self.new_trial(tr_cond)
-                    self.run_trial()
-            self.trial_q = None
+                self.log.debug("Moving to next trial")
+            self.trial_queue = None
 
         # This is the default if no session has been run
-        if self.session_q is None:
-            self.log.info('Next sessions: %s' % self.parameters['block_design']['order'])
-            self.session_q = queues.block_queue(self.parameters['block_design']['order']) # Currently set to "default". Can be a list though.
+        if self.session_queue is None:
+            self.log.debug("Generating session queue")
+            self.session_queue = queues.block_queue(self.parameters['block_design']['order'])
 
-        # Also set to None if no trials have been run
-        if self.trial_q is None:
+        if self.trial_queue is None:
             # This is looping through queues.block_queue which is yielding a random block
-            for sn_cond in self.session_q:
+            for sn_cond in self.session_queue:
 
                 self.trials = []
-                self.do_correction = False
                 self.session_id += 1
-                self.log.info('starting session %s: %s' % (self.session_id,sn_cond))
 
+                self.session_start_time = dt.datetime.now()
+                self.log.info("Session %d began at %s with condition %s" % (self.session_id, self.session_start_time.ctime(), sn_cond))
                 # grab the block details
-                # A dictionary with the block queue type (e.g. random) and a list of classes (e.g. L) This nomentclature is rough. Classes are conditions, it seems
+                # A dictionary with the block queue type (e.g. random) and a list of classes (e.g. L) This nomenclature is rough. Classes are conditions, it seems
                 blk = copy.deepcopy(self.parameters['block_design']['blocks'][sn_cond])
 
                 # load the block details into the trial queue
                 q_type = blk.pop('queue')
                 if q_type=='random':
-                    self.trial_q = queues.random_queue(**blk) # blk now just carries the conditions left (e.g. Go, No-Go) Should add weights!
+                    self.log.debug("Creating random trial queue")
+                    self.trial_queue = queues.random_queue(**blk) # blk now just carries the conditions left (e.g. Go, No-Go) Should add weights!
                 elif q_type=='block':
-                    self.trial_q = queues.block_queue(**blk)
+                    self.log.debug("Creating blocked trial queue")
+                    self.trial_queue = queues.block_queue(**blk)
                 elif q_type=='staircase':
-                    self.trial_q = queues.staircase_queue(self, **blk)
+                    self.log.debug("Creating staircase trial queue")
+                    self.trial_queue = queues.staircase_queue(self, **blk)
 
+                # Load up stimuli - Probably need this to happen because we need fast stimulus triggering
+                # self.load_trials()
+
+                # Turn on the center light
+                self.log.debug("Turning response port light on to start the session")
+                self.panel.response_port.on()
+
+                # Poll for a response
+                self.log.debug("Begin polling for the initial peck")
+                self.first_trial_start = self.panel.response_port.poll()
+
+                # Once a peck is registered, begin the trial and set the session schedule
+                self.log.info("First peck registered at %s" % self.first_trial_start.ctime())
+                self.schedule_current_session()
+                self.log.debug("Current session scheduled to end at %s" % self.parameters["session_schedule"][0][1])
                 try:
                     # Start running trials
                     run_trial_queue()
                 except EndSession:
                     return 'post'
 
-            self.session_q = None
+            self.session_queue = None
 
         else:
-            self.log.info('continuing last session')
             try:
                 run_trial_queue()
             except EndSession:
@@ -207,14 +232,7 @@ class GoNoGoInterrupt(base.BaseExp):
 
         return 'post'
 
-    def session_post(self):
-        """ Closes out the sessions
-
-        """
-        self.log.info('ending session')
-        return None
-
-    ## trial flow
+    ## Trial Flow
     def new_trial(self, conditions=None):
         """Creates a new trial and appends it to the trial list
 
@@ -229,42 +247,21 @@ class GoNoGoInterrupt(base.BaseExp):
             arguments and saved to the trial annotations.
 
         """
-        if len(self.trials) > 0:
-            index = self.trials[-1].index+1
-        else:
-            index = 0
 
-        if self.do_correction:
-            # for correction trials, we want to use the last trial as a template
-            trial = utils.Trial(type_='correction',
-                                index=index,
-                                class_=self.trials[-1].class_)
-            for ev in self.trials[-1].events:
-                if ev.label is 'wav':
-                    trial.events.append(copy.copy(ev))
-                    trial.stimulus_event = trial.events[-1]
-                    trial.stimulus = trial.stimulus_event.name
-                elif ev.label is 'motif':
-                    trial.events.append(copy.copy(ev))
-            self.log.debug("correction trial: class is %s" % trial.class_)
-        else:
-            # otherwise, we'll create a new trial
-            trial = utils.Trial(index=index)
-            trial.class_ = conditions['class']
-            trial_stim, trial_motifs = self.get_stimuli(**conditions)
-            trial.events.append(trial_stim)
-            trial.stimulus_event = trial.events[-1]
-            trial.stimulus = trial.stimulus_event.name
-            for mot in trial_motifs:
-                trial.events.append(mot)
+        index = len(self.trials)
+        trial = utils.Trial(index=index)
+        trial.class_ = conditions['class']
+        trial_stim = self.get_stimuli(**conditions)
+        trial.stimulus_event = trial_stim
+        trial.stimulus = trial.stimulus_event.name
 
-        trial.session=self.session_id
+        trial.session = self.session_id
         trial.annotate(**conditions)
 
         self.trials.append(trial)
-        self.this_trial = self.trials[-1]
-        self.this_trial_index = self.trials.index(self.this_trial)
-        self.log.debug("trial %i: %s, %s" % (self.this_trial.index,self.this_trial.type_,self.this_trial.class_))
+        self.this_trial = trial
+
+
 
         return True
 
@@ -277,18 +274,118 @@ class GoNoGoInterrupt(base.BaseExp):
 
 
         """
-        # TODO: default stimulus selection
-        stim_name = conditions['stim_name']
-        stim_file = self.parameters['stims'][stim_name]
-        self.log.debug(stim_file)
-
+        stim_file = random.choice(self.parameters['stims'][conditions["class"]])
         stim = utils.auditory_stim_from_wav(stim_file)
-        epochs = []
-        return stim, epochs
+        return stim
 
-    def analyze_trial(self):
-        # TODO: calculate reaction times
-        pass
+    def run_trial(self):
+
+        utils.run_state_machine(start_in="trial_pre",
+                                error_state="trial_post", # probably should do some error handling
+                                error_callback=self.log_error_callback,
+                                stimulus_pre=self.stimulus_pre,
+                                stimulus_main=self.stimulus_main,
+                                response=self.response_main,
+                                reward=self.reward_main,
+                                trial_pre=self.trial_pre,
+                                trial_post=self.trial_post)
+
+    def trial_pre(self):
+        ''' this is where we initialize a trial'''
+        self.log.debug("trial_pre")
+        self.this_trial.annotate(min_wait=0.1)
+        self.this_trial.annotate(max_wait=self.this_trial.stimulus_event.duration)
+
+        return "stimulus_pre"
+
+    def stimulus_pre(self):
+        # wait for bird to peck
+        self.log.debug("stimulus_pre - queuing file in speaker")
+        self.panel.speaker.queue(self.this_trial.stimulus_event.file_origin)
+        self.log.debug("wavfile queued")
+        return "stimulus_main"
+
+    def stimulus_main(self):
+        ##play stimulus
+        self.log.debug("stimulus_main")
+        self.this_trial.time = dt.datetime.now()
+        self.log.info("Trial %d - %s - %s - %s" % (self.this_trial.index,
+                                                   self.this_trial.time.strftime("%H:%M:%S"),
+                                                   self.this_trial.class_,
+                                                   self.this_trial.stimulus))
+        # ipdb.set_trace()
+        self.panel.speaker.play() # already queued in stimulus_pre()
+        self.log.debug("played stimulus")
+
+        return "response"
+
+    def response_main(self):
+
+        self.log.debug("response_main")
+        utils.wait(self.this_trial.annotations["min_wait"])
+        self.log.debug("waited %3.2f seconds" % self.this_trial.annotations["min_wait"])
+        self.this_trial.peck_time = self.panel.response_port.poll(self.this_trial.annotations['max_wait'])
+        self.log.debug("Received peck or timeout. Stopping playback")
+        self.panel.speaker.stop()
+        self.log.debug("Playback stopped")
+        if self.this_trial.peck_time is None:
+            self.log.debug("No peck detected")
+            self.this_trial.response = 0
+            if self.this_trial.class_ == "NoGo":
+                self.log.debug("No Go stimulus. Giving reward")
+                self.this_trial.correct = 1
+                self.this_trial.reward = 1
+                return "reward"
+            else:
+                self.log.debug("Go stimulus. No reward")
+                self.this_trial.correct = 0
+                self.this_trial.reward = 0
+                return "trial_post"
+
+        else:
+            self.this_trial.response = 1
+
+            if self.this_trial.class_ == "Go":
+                self.this_trial.correct = 1
+            else:
+                self.this_trial.correct = 0
+            self.this_trial.rt = self.this_trial.peck_time - self.this_trial.time
+            self.this_trial.reward = 0
+
+            self.log.info("Peck detected. RT = %3.2f" % self.this_trial.rt.total_seconds())
+            return "trial_post"
+
+    def reward_main(self):
+
+        self.log.debug("reward_main")
+        self.summary['feeds'] += 1
+        value = self.parameters['reward_duration']
+        self.log.info("Supplying reward for %3.2f seconds" % value)
+        reward_event = self.panel.reward(value=value)
+
+        return "trial_post"
+
+    def trial_post(self):
+        '''things to do at the end of a trial'''
+
+        self.log.debug("trial_post")
+        self.summary['trials'] += 1
+        self.summary['last_trial_time'] = self.this_trial.time.ctime()
+
+        self.log.debug("Saving trial data")
+        self.save_trial(self.this_trial)
+
+        if self.check_session_schedule()==False:
+            self.log.debug("Session has run long enough. Ending")
+            raise EndSession
+
+        if self.this_trial.peck_time is None:
+            self.log.debug("Waiting for peck to start a new trial")
+            timeout = (self.session_end_time - dt.datetime.now()).total_seconds()
+            pecked = self.panel.response_port.poll(timeout)
+            if pecked is None:
+                raise EndSession
+
 
     def save_trial(self,trial):
         '''write trial results to CSV'''
@@ -304,259 +401,47 @@ class GoNoGoInterrupt(base.BaseExp):
             trialWriter = csv.DictWriter(data_fh,fieldnames=self.fields_to_save,extrasaction='ignore')
             trialWriter.writerow(trial_dict)
 
-    def run_trial(self):
-        self.trial_pre()
-
-        self.stimulus_pre()
-        self.stimulus_main()
-        self.stimulus_post()
-
-        self.response_pre()
-        self.response_main()
-        self.response_post()
-
-        self.consequence_pre()
-        self.consequence_main()
-        self.consequence_post()
-
-        self.trial_post()
-
-    def trial_pre(self):
-        ''' this is where we initialize a trial'''
-        # make sure lights are on at the beginning of each trial, prep for trial
-        self.log.debug('running trial')
-        self.log.debug("number of open file descriptors: %d" %(utils.get_num_open_fds()))
-
-        self.this_trial = self.trials[-1]
-        min_wait = self.this_trial.stimulus_event.duration
-        max_wait = self.this_trial.stimulus_event.duration + self.parameters['response_win']
-        self.this_trial.annotate(min_wait=min_wait)
-        self.this_trial.annotate(max_wait=max_wait)
-        self.log.debug('created new trial')
-        self.log.debug('min/max wait: %s/%s' % (min_wait,max_wait))
-
-
-    def trial_post(self):
-        '''things to do at the end of a trial'''
-        self.this_trial.duration = (dt.datetime.now() - self.this_trial.time).total_seconds()
-        self.analyze_trial()
-        self.save_trial(self.this_trial)
-        self.write_summary()
-        utils.wait(self.parameters['intertrial_min'])
-
-        # determine if next trial should be a correction trial
-        self.do_correction = True
-        if len(self.trials) > 0:
-            if self.parameters['correction_trials']:
-                if self.this_trial.correct == True:
-                    self.do_correction = False
-                elif self.this_trial.response == 'none':
-                    if self.this_trial.type_ == 'normal':
-                        self.do_correction = False
-            else:
-                self.do_correction = False
+    def session_post(self):
+        """ Closes out the sessions
+        """
+        # If session id is less than number of sessions for the day, set the session schedule for the next start
+        self.session_end_time = dt.datetime.now()
+        self.session_queue = None
+        self.trial_queue = None
+        self.log.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
+        if self.session_id < self.parameters["num_sessions"]:
+            self.schedule_next_session()
+            self.log.info("Next session scheduled to start at %s" % self.parameters["session_schedule"][0][0])
         else:
-            self.do_correction = False
+            self.log.info("Finished all sessions. Going to sleep")
 
-        if self.check_session_schedule()==False:
-            raise EndSession
-
-    def stimulus_pre(self):
-        # wait for bird to peck
-        self.log.debug("presenting stimulus %s" % self.this_trial.stimulus)
-        self.log.debug("from file %s" % self.this_trial.stimulus_event.file_origin)
-        self.panel.speaker.queue(self.this_trial.stimulus_event.file_origin)
-        self.log.debug('waiting for peck...')
-        self.panel.center.on()
-        self.this_trial.time = self.panel.center.poll() ## need to add a 1 minute timeout to check the sched
-        self.panel.center.off()
-        self.this_trial.events.append(utils.Event(name='center',
-                                                  label='peck',
-                                                  time=0.0,
-                                                  )
-                                            )
-
-        # record trial initiation
-        self.summary['trials'] += 1
-        self.summary['last_trial_time'] = self.this_trial.time.ctime()
-        self.log.info("trial started at %s" % self.this_trial.time.ctime())
-
-    def stimulus_main(self):
-        ## 1. present cue
-        if 'cue' in self.this_trial.annotations:
-            cue = self.this_trial.annotations["cue"]
-            self.log.debug("cue light turning on")
-            cue_start = dt.datetime.now()
-            if cue=="red":
-                self.panel.cue.red()
-            elif cue=="green":
-                self.panel.cue.green()
-            elif cue=="blue":
-                self.panel.cue.blue()
-            utils.wait(self.parameters["cue_duration"])
-            self.panel.cue.off()
-            cue_dur = (dt.datetime.now() - cue_start).total_seconds()
-            cue_time = (cue_start - self.this_trial.time).total_seconds()
-            cue_event = utils.Event(time=cue_time,
-                                    duration=cue_dur,
-                                    label='cue',
-                                    name=cue,
-                                    )
-            self.this_trial.events.append(cue_event)
-            utils.wait(self.parameters["cuetostim_wait"])
-
-        ## 2. play stimulus
-        stim_start = dt.datetime.now()
-        self.this_trial.stimulus_event.time = (stim_start - self.this_trial.time).total_seconds()
-        self.panel.speaker.play() # already queued in stimulus_pre()
-
-    def stimulus_post(self):
-        self.log.debug('waiting %s secs...' % self.this_trial.annotations['min_wait'])
-        utils.wait(self.this_trial.annotations['min_wait'])
-
-    #response flow
-    def response_pre(self):
-        for class_, port in self.class_assoc.items():
-            port.on()
-        self.log.debug('waiting for response')
-
-    def response_main(self):
-        while True:
-            elapsed_time = (dt.datetime.now() - self.this_trial.time).total_seconds()
-            rt = elapsed_time - self.this_trial.stimulus_event.time
-            if rt > self.this_trial.annotations['max_wait']:
-                self.panel.speaker.stop()
-                self.this_trial.response = 'none'
-                self.log.info('no response')
-                return
-            for class_, port in self.class_assoc.items():
-                if port.status():
-                    self.this_trial.rt = rt
-                    self.panel.speaker.stop()
-                    self.this_trial.response = class_
-                    self.summary['responses'] += 1
-                    response_event = utils.Event(name=self.parameters['classes'][class_]['component'],
-                                                 label='peck',
-                                                 time=elapsed_time,
-                                                 )
-                    self.this_trial.events.append(response_event)
-                    self.log.info('response: %s' % (self.this_trial.response))
-                    return
-            utils.wait(.015)
-
-    def response_post(self):
-        for class_, port in self.class_assoc.items():
-            port.off()
-
-    ## consequence flow
-    def consequence_pre(self):
-        pass
-
-    def consequence_main(self):
-        # correct trial
-        if self.this_trial.response == self.this_trial.class_:
-            self.this_trial.correct = True
-
-            if self.parameters['reinforcement']['secondary']:
-                secondary_reinf_event = self.secondary_reinforcement()
-                # self.this_trial.events.append(secondary_reinf_event)
-
-            if self.this_trial.type_ == 'correction':
-                self._run_correction_reward()
-            elif self.reinf_sched.consequate(trial=self.this_trial):
-                self.reward_pre()
-                self.reward_main() # provide a reward
-                self.reward_post()
-
-        # no response
-        elif self.this_trial.response is 'none':
-            pass
-
-        # incorrect trial
-        else:
-            self.this_trial.correct = False
-            if self.reinf_sched.consequate(trial=self.this_trial):
-                self.punish_pre()
-                self.punish_main()
-                self.punish_post()
-
-    def consequence_post(self):
-        pass
-
-
-    def secondary_reinforcement(self,value=1.0):
-        return self.panel.center.flash(dur=value)
-
-    ## reward flow
-    def reward_pre(self):
-        pass
-
-    def reward_main(self):
-        self.summary['feeds'] += 1
-        try:
-            value = self.parameters['classes'][self.this_trial.class_]['reward_value']
-            reward_event = self.panel.reward(value=value)
-            self.this_trial.reward = True
-
-        # but catch the reward errors
-
-        ## note: this is quite specific to the Gentner Lab. consider
-        ## ways to abstract this
-        except components.HopperAlreadyUpError as err:
-            self.this_trial.reward = True
-            self.summary['hopper_already_up'] += 1
-            self.log.warning("hopper already up on panel %s" % str(err))
-            utils.wait(self.parameters['classes'][self.this_trial.class_]['reward_value'])
-            self.panel.reset()
-
-        except components.HopperWontComeUpError as err:
-            self.this_trial.reward = 'error'
-            self.summary['hopper_failures'] += 1
-            self.log.error("hopper didn't come up on panel %s" % str(err))
-            utils.wait(self.parameters['classes'][self.this_trial.class_]['reward_value'])
-            self.panel.reset()
-
-        # except components.ResponseDuringFeedError as err:
-        #     trial['reward'] = 'Error'
-        #     self.summary['responses_during_reward'] += 1
-        #     self.log.error("response during reward on panel %s" % str(err))
-        #     utils.wait(self.reward_dur[trial['class']])
-        #     self.panel.reset()
-
-        except components.HopperWontDropError as err:
-            self.this_trial.reward = 'error'
-            self.summary['hopper_wont_go_down'] += 1
-            self.log.warning("hopper didn't go down on panel %s" % str(err))
-            self.panel.reset()
-
-        finally:
-            self.panel.house_light.on()
-
-    def reward_post(self):
-        pass
-
-    def _run_correction_reward(self):
-        pass
 
 
 if __name__ == "__main__":
 
     try: import simplejson as json
     except ImportError: import json
+    from pyoperant.tlab.local_tlab import PANELS
+    from pyoperant.tlab.go_no_go_interrupt import GoNoGoInterrupt
 
-    from pyoperant.local import PANELS
-
-    cmd_line = utils.parse_commandline()
-    with open(cmd_line['config_file'], 'rb') as config:
+    #cmd_line = utils.parse_commandline()
+    config_file = "/Users/tylerlee/code/pyoperant/pyoperant/tlab/go_no_go_interrupt_config.json"
+    with open(config_file, 'rb') as config:
             parameters = json.load(config)
 
-    assert utils.check_cmdline_params(parameters, cmd_line)
+    #assert utils.check_cmdline_params(parameters, cmd_line)
 
     if parameters['debug']:
         print parameters
         print PANELS
 
     panel = PANELS[parameters['panel_name']]()
+    if isinstance(parameters["session_schedule"], list):
+        if isinstance(parameters["session_schedule"][0], unicode):
+            parameters["session_schedule"] = [tuple(parameters["session_schedule"])]
+    if isinstance(parameters["light_schedule"], list):
+        if isinstance(parameters["light_schedule"][0], unicode):
+            parameters["light_schedule"] = [tuple(parameters["light_schedule"])]
 
     exp = GoNoGoInterrupt(panel=panel,**parameters)
     exp.run()

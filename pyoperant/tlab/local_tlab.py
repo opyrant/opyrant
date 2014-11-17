@@ -1,6 +1,6 @@
 from pyoperant import hwio, components, panels, utils
 from pyoperant.tlab import components_tlab, hwio_tlab
-from pyoperant.interfaces import pyaudio_, pyserial_
+from pyoperant.interfaces import pyaudio_, arduino_
 
 
 _BOX_MAP = {1: ("/dev/tty.usbserial", [4], [8, 9, 10], "Built-in Output"),
@@ -8,13 +8,13 @@ _BOX_MAP = {1: ("/dev/tty.usbserial", [4], [8, 9, 10], "Built-in Output"),
             }
 class TLabPanel(panels.BasePanel):
 
-    baud_rate = 9600
+    baud_rate = 19200
 
     def __init__(self, id=None, *args, **kwargs):
         super(TLabPanel, self).__init__(self, *args, **kwargs)
 
         self.id = id
-        self.interfaces['pyserial'] = pyserial_.PySerialInterface(device_name=_BOX_MAP[self.id][0], baud_rate=self.baud_rate)
+        self.interfaces['pyserial'] = arduino_.ArduinoInterface(device_name=_BOX_MAP[self.id][0], baud_rate=self.baud_rate)
         self.interfaces['pyaudio'] = pyaudio_.PyAudioInterface(device_name=_BOX_MAP[self.id][3]) #callback should be related to pecking
         self.speaker = hwio.AudioOutput(interface=self.interfaces['pyaudio'])
         #
@@ -27,7 +27,7 @@ class TLabPanel(panels.BasePanel):
             self.outputs.append(hwio.BooleanOutput(interface=self.interfaces["pyserial"],
                                                    params={"channel": ii}))
 
-        self.center = components.PeckPort(IR=self.inputs[0],LED=self.outputs[0],name='c')
+        self.response_port = components.PeckPort(IR=self.inputs[0],LED=self.outputs[0],name='c')
         self.house_light = components.HouseLight(light=self.outputs[1])
         self.hopper = components_tlab.HopperNoIR(solenoid=self.outputs[2])
 

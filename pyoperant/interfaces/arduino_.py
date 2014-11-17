@@ -1,10 +1,12 @@
+import time
+import datetime
 import serial
 from pyoperant.interfaces import base_
 from pyoperant import utils, InterfaceError
 
 
-class PySerialInterface(base_.BaseInterface):
-    """Creates a pyserial interface to communicate with a serial accessible device such as an arduino.
+class ArduinoInterface(base_.BaseInterface):
+    """Creates a pyserial interface to communicate with an arduino via the serial connection.
     Communication is through two byte messages where the first byte specifies the channel and the second byte specifies the action.
     Valid actions are:
     0. Read input value
@@ -20,11 +22,12 @@ class PySerialInterface(base_.BaseInterface):
     Still need to fix polling, but I need to see what it needs to do.
     """
     def __init__(self,device_name,baud_rate=9600,*args,**kwargs):
-        super(PySerialInterface, self).__init__(*args,**kwargs)
+        super(ArduinoInterface, self).__init__(*args,**kwargs)
         self.device_name = device_name
         self.read_params = ('channel',
                             )
         self.inverted_channels = list()
+        self.last_press = dict()
         self.baud_rate = baud_rate
         self.open()
 
@@ -37,7 +40,7 @@ class PySerialInterface(base_.BaseInterface):
         self.device = serial.Serial(self.device_name, self.baud_rate)
         if self.device is None:
             raise InterfaceError('could not open serial device %s' % self.device_name)
-        utils.wait(1.5)
+        self.device.readline()
 
     def close(self):
         '''Close a serial connection for the device
@@ -84,11 +87,32 @@ class PySerialInterface(base_.BaseInterface):
         else:
             raise InterfaceError('could not read from serial device "%s", channel %d' % (self.device,channel))
 
-    def _poll(self,channel):
+    def _poll(self, channel, timeout=None):
         """ runs a loop, querying for pecks. returns peck time or "GoodNite" exception """
-        date_fmt = '%Y-%m-%d %H:%M:%S.%f'
-        timestamp = subprocess.check_output(['comedi_poll', self.device_name, '-s', str(subdevice), '-c', str(channel)])
-        return datetime.datetime.strptime(timestamp.strip(),date_fmt)
+
+        if timeout is not None:
+            start = time.time()
+
+        long_press_lock = False
+        if (channel in self.last_press) and (self.last_press[channel]):
+            if self._read_bool(channel):
+                long_press_lock = True
+                #print "Long press lock turned on"
+
+        while True:
+            if not self._read_bool(channel):
+                if long_press_lock:
+                    long_press_lock = False
+                    self.last_press[channel] = False
+            elif not long_press_lock:
+                break
+
+            if timeout is not None:
+                if time.time() - start >= timeout:
+                    return None
+
+        self.last_press[channel] = True
+        return datetime.datetime.now()
 
     def _write_bool(self,channel,value):
         '''Write a value to the specified channel
