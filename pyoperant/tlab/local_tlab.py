@@ -3,7 +3,7 @@ from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_
 
 
-_BOX_MAP = {1: ("/dev/tty.usbserial", [4], [8, 9, 10], "Built-in Output"),
+_BOX_MAP = {1: ("/dev/tty.usbserial-A700619q", [4], [8, 9, 10], "Built-in Output"),
             2: ("/dev/tty.usbserial", [4], [8, 9, 10], "sysdefault"),
             }
 class TLabPanel(panels.BasePanel):

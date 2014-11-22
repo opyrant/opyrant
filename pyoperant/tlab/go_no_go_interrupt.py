@@ -425,7 +425,7 @@ if __name__ == "__main__":
     from pyoperant.tlab.go_no_go_interrupt import GoNoGoInterrupt
 
     #cmd_line = utils.parse_commandline()
-    config_file = "/home/tlee/Data/code/pyoperant/pyoperant/tlab/go_no_go_interrupt_config.json"
+    config_file = "/Users/tylerlee/code/pyoperant/pyoperant/tlab/go_no_go_interrupt_config.json"
     with open(config_file, 'rb') as config:
             parameters = json.load(config)
 

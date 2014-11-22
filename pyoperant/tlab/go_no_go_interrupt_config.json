@@ -5,9 +5,9 @@
 		"email": "siriuslee305@gmail.com"
 	},
 	"subject": "Test",
-	"panel_name": "Box2",
-	"experiment_path": "/home/tlee/Data/exp/Test",
-    "stim_path": "/home/tlee/Data/stimuli/Test",
+	"panel_name": "Box1",
+	"experiment_path": "/Users/tylerlee/exp/Test",
+    "stim_path": "/Users/tylerlee/stimuli/Test",
 	"name": "go no-go interruption",
 	"description": "Testing go no-go interruption task",
 	"debug": true,

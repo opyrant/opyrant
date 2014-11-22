@@ -40,8 +40,8 @@ class ArduinoInterface(base_.BaseInterface):
         self.device = serial.Serial(self.device_name, self.baud_rate)
         if self.device is None:
             raise InterfaceError('could not open serial device %s' % self.device_name)
-        # self.device.readline()
-        utils.wait(1.5)
+        self.device.readline() # This line ensures that the device has initialized, but for some reason it takes much longer on linux than osx
+        # utils.wait(1.5)
 
     def close(self):
         '''Close a serial connection for the device
