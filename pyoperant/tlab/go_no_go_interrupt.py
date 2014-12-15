@@ -445,3 +445,23 @@ if __name__ == "__main__":
 
     exp = GoNoGoInterrupt(panel=panel, **parameters)
     exp.run()
+
+    ## Testing pecking key
+    from pyoperant.tlab import hwio_tlab, components_tlab
+    from pyoperant.interfaces import arduino_
+    from pyoperant import hwio, components
+    device_name = "/dev/tty.usbmodemfd131"
+    input_port = 4
+    output_port = 8
+    interface = arduino_.ArduinoInterface(device_name=device_name, baud_rate=19200)
+    dev_input = hwio_tlab.ConfigurableBooleanInput(interface=interface,
+                                                   params={"channel": input_port},
+                                                   config_params={"pullup": False})
+    dev_output = hwio.BooleanOutput(interface=interface,
+                                    params={"channel": output_port})
+    response_port = components.PeckPort(IR=dev_input, LED=dev_output, name="c")
+
+    feeder_port = 9
+    dev_feeder = hwio.BooleanOutput(interface=interface,
+                                    params={"channel": feeder_port})
+    feeder = components_tlab.HopperNoIR(solenoid=dev_feeder)

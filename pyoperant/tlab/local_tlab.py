@@ -3,7 +3,7 @@ from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_
 
 
-_BOX_MAP = {1: ("/dev/tty.usbserial-A700619q", [4], [8, 9, 10], "Built-in Output"),
+_BOX_MAP = {1: ("/dev/tty.usbmodemfd131", [4], [8, 9, 10], "Built-in Output"),
             2: ("/dev/tty.usbserial", [4], [8, 9, 10], "sysdefault"),
             }
 class TLabPanel(panels.BasePanel):
@@ -22,7 +22,7 @@ class TLabPanel(panels.BasePanel):
         for ii in _BOX_MAP[self.id][1]:
             self.inputs.append(hwio_tlab.ConfigurableBooleanInput(interface=self.interfaces["pyserial"],
                                                                   params={"channel": ii},
-                                                                  config_params={"pullup": True}))
+                                                                  config_params={"pullup": False}))
         for ii in _BOX_MAP[self.id][2]:
             self.outputs.append(hwio.BooleanOutput(interface=self.interfaces["pyserial"],
                                                    params={"channel": ii}))

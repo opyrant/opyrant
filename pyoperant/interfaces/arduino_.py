@@ -17,9 +17,6 @@ class ArduinoInterface(base_.BaseInterface):
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
-
-
-    Still need to fix polling, but I need to see what it needs to do.
     """
     def __init__(self,device_name,baud_rate=9600,*args,**kwargs):
         super(ArduinoInterface, self).__init__(*args,**kwargs)
