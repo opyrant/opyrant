@@ -170,7 +170,7 @@ class Hopper(BaseComponent):
         self.down() # includes a lag
         return (feed_time,feed_duration)
 
-    def reward(self,value=2.0):
+    def reward(self, value=2.0):
         """wrapper for `feed`, passes *value* into *dur* """
         return self.feed(dur=value)
 

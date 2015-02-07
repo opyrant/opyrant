@@ -69,9 +69,9 @@ class GoNoGoInterrupt(base.BaseExp):
                                'stimulus',
                                'class_',
                                'response',
-                               'correct',
+                               'correct',  # redundant
                                'rt',
-                               'reward',
+                               'reward',  # redundant
                                'max_wait',
                                ]
 
@@ -82,7 +82,7 @@ class GoNoGoInterrupt(base.BaseExp):
         # This sets up the reinforcement schedule. Defaults to continuous where every correct trial is rewarded
         self.reinf_sched = reinf.ContinuousReinforcement()
 
-        # Add weights to random queue to adjust the probability of a go stim
+        # Add weights to random queue to adjust the probability of a go stim GROSSS
         default_block = dict(queue="random",
                              conditions=[{"class": "Go"},
                                          {"class": "NoGo"}],

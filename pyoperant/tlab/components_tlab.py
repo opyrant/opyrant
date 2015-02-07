@@ -14,6 +14,7 @@ class HopperNoIR(Hopper):
     solenoid : hwio.BooleanOutput
         output channel to activate the solenoid & raise the hopper
     """
+
     def __init__(self,solenoid,*args,**kwargs):
         super(Hopper, self).__init__(*args,**kwargs)
         self.lag = 0
@@ -26,4 +27,5 @@ class HopperNoIR(Hopper):
         """Overrides Hopper.check and always returns the status of the solenoid
         """
 
+        print "HopperNoIR.check: Beware, doesn't actually check anything!"
         return self.solenoid.read()
