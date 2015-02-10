@@ -3,6 +3,7 @@ import wave
 from pyoperant.interfaces import base_
 from pyoperant import InterfaceError
 
+
 class PyAudioInterface(base_.BaseInterface):
     """Class which holds information about an audio device
 

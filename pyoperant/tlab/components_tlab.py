@@ -1,5 +1,6 @@
 from pyoperant import hwio
-from pyoperant.components import Hopper
+from pyoperant.components import Hopper, BaseComponent
+
 
 class HopperNoIR(Hopper):
     """ Class which holds information about a hopper
@@ -15,10 +16,10 @@ class HopperNoIR(Hopper):
         output channel to activate the solenoid & raise the hopper
     """
 
-    def __init__(self,solenoid,*args,**kwargs):
-        super(Hopper, self).__init__(*args,**kwargs)
+    def __init__(self, solenoid, *args, **kwargs):
+        BaseComponent.__init__(*args, **kwargs)
         self.lag = 0
-        if isinstance(solenoid,hwio.BooleanOutput):
+        if isinstance(solenoid, hwio.BooleanOutput):
             self.solenoid = solenoid
         else:
             raise ValueError('%s is not an output channel' % solenoid)

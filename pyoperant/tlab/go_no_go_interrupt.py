@@ -193,7 +193,7 @@ class GoNoGoInterrupt(base.BaseExp):
                 q_type = blk.pop('queue')
                 if q_type=='random':
                     self.log.debug("Creating random trial queue")
-                    self.trial_queue = queues.random_queue(**blk) # blk now just carries the conditions left (e.g. Go, No-Go) Should add weights!
+                    self.trial_queue = queues.random_queue(**blk)
                 elif q_type=='block':
                     self.log.debug("Creating blocked trial queue")
                     self.trial_queue = queues.block_queue(**blk)
