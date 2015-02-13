@@ -16,7 +16,7 @@ class AVConvInterface(base_.BaseInterface):
 
     def __init__(self, *args, **kwargs):
 
-        super(AVConv, self).__init__(*args, **kwargs)
+        super(AVConvInterface, self).__init__(*args, **kwargs)
         self.video = None
         self.audio = None
 
@@ -131,6 +131,9 @@ class AVConvInterface(base_.BaseInterface):
 
         # Send SIGINT to the thread if it exists. This simulates Ctrl+C from command line, which is what avconv expects
         if self.recording_thread:
-            self.recording_thread.process.send_signal(signal.SIGINT)
-            # Close down recording_thread and set it to None
-            self.recording_thread = None
+            try:
+                self.recording_thread.process.send_signal(signal.SIGINT)
+                # Close down recording_thread and set it to None
+                self.recording_thread = None
+            except OSError as e:
+                print "Error stopping recording: %s" % e

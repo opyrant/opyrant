@@ -53,7 +53,7 @@ class ArduinoInterface(base_.BaseInterface):
 
         self.device.close()
 
-    def _config_read(self, channel, pullup=False):
+    def _config_read(self, channel, pullup=False, **kwargs):
         ''' Configure the channel to act as an input
         :param channel: the channel number to configure
         :param pullup: the channel should be configured in pullup mode. On the arduino this has the effect of
@@ -68,7 +68,7 @@ class ArduinoInterface(base_.BaseInterface):
 
         self._state[channel] = dict(invert=pullup, pressed=False)
 
-    def _config_write(self, channel):
+    def _config_write(self, channel, **kwargs):
         ''' Configure the channel to act as an output
         :param channel: the channel number to configure
         :return: None
@@ -76,7 +76,7 @@ class ArduinoInterface(base_.BaseInterface):
 
         self.device.write(self._make_arg(channel, 3))
 
-    def _read_bool(self, channel):
+    def _read_bool(self, channel, **kwargs):
         ''' Read a value from the specified channel
         :param channel: the channel from which to read
         :return: value
@@ -91,11 +91,12 @@ class ArduinoInterface(base_.BaseInterface):
                     v = 1 - v
                 return v == 1
             except KeyError:  # This channel has not been configured!
-                raise InterfaceError('Channel %d of device %s has not yet been configured!' % (channel, self.device))
+                return v == 1
+                #raise InterfaceError('Channel %d of device %s has not yet been configured!' % (channel, self.device))
         else:
             raise InterfaceError('Could not read from serial device "%s", channel %d' % (self.device, channel))
 
-    def _poll(self, channel, timeout=None):
+    def _poll(self, channel, timeout=None, **kwargs):
         """ runs a loop, querying for pecks. returns peck time or "GoodNite" exception """
 
         if timeout is not None:
@@ -115,7 +116,7 @@ class ArduinoInterface(base_.BaseInterface):
         self._state[channel]["pressed"] = True
         return datetime.datetime.now()
 
-    def _write_bool(self, channel, value):
+    def _write_bool(self, channel, value, **kwargs):
         '''Write a value to the specified channel
         :param channel: the channel to write to
         :param value: the value to write
@@ -135,4 +136,3 @@ class ArduinoInterface(base_.BaseInterface):
     def _make_arg(channel, value):
 
         return "".join([chr(channel), chr(value)])
-

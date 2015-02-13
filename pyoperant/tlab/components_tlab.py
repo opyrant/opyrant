@@ -17,7 +17,7 @@ class HopperNoIR(Hopper):
     """
 
     def __init__(self, solenoid, *args, **kwargs):
-        BaseComponent.__init__(*args, **kwargs)
+        BaseComponent.__init__(self, *args, **kwargs)
         self.lag = 0
         if isinstance(solenoid, hwio.BooleanOutput):
             self.solenoid = solenoid

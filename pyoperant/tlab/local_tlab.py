@@ -1,3 +1,4 @@
+import os
 from pyoperant import hwio, components, panels, utils
 from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
@@ -14,6 +15,13 @@ class TLabPanel(panels.BasePanel):
                          },
                      2: {"arduino": "/dev/tty.usbserial",
                          "speaker": "sysdefault",
+                         "key_input": 4,
+                         "key_light": 8,
+                         "main_light": 9,
+                         "hopper": 10,
+                         },
+                     3: {"arduino": "/dev/ttyACM0",
+                         "speaker": "speaker0",
                          "key_input": 4,
                          "key_light": 8,
                          "main_light": 9,
@@ -94,5 +102,5 @@ class TLabPanel(panels.BasePanel):
         self.reset()
         return True
 
-PANELS = {"Box1": TLabPanel(id=1),
-          "Box2": TLabPanel(id=2)}
+PANELS = {"Box1": lambda :TLabPanel(id=1),
+          "Box2": lambda :TLabPanel(id=2)}
