@@ -1,9 +1,11 @@
 import time
 import datetime
 import serial
+import logging
 from pyoperant.interfaces import base_
 from pyoperant import utils, InterfaceError
 
+logger = logging.getLogger(__name__)
 
 class ArduinoInterface(base_.BaseInterface):
     """Creates a pyserial interface to communicate with an arduino via the serial connection.
@@ -31,8 +33,18 @@ class ArduinoInterface(base_.BaseInterface):
 
         self.read_params = ('channel', 'pullup')
         self._state = dict()
+        self.inputs = []
+        self.outputs = []
 
         self.open()
+
+    def __str__(self):
+
+        return "Arduino device at %s: %d input channels and %d output channels configured" % (self.device_name, len(self.inputs), len(self.outputs))
+
+    def __repr__(self):
+
+        return "ArduinoInterface(%s, baud_rate=%d)" % (self.device_name, self.baud_rate)
 
     def open(self):
         '''Open a serial connection for the device
@@ -135,4 +147,3 @@ class ArduinoInterface(base_.BaseInterface):
     def _make_arg(channel, value):
 
         return "".join([chr(channel), chr(value)])
-

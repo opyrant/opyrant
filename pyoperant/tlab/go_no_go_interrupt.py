@@ -51,18 +51,15 @@ class GoNoGoInterrupt(base.BaseExp):
 
         super(GoNoGoInterrupt,  self).__init__(*args, **kwargs)
 
-        stdhandler = logging.StreamHandler(sys.stdout)
-        stdhandler.setLevel(self.log_level)
-        stdhandler.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
-        self.log.addHandler(stdhandler)
-
-        # Set the shaping protocol
-        self.shaper = shape.Shaper2AC(self.panel, self.log, self.parameters, self.log_error_callback) # Need a shaper protocol
-
         # Which components must be present in the panel
+        # Should move this to: "stimulus", "response_port", "initialization_port", "reward"
+        # Make it describe the behavior and then have the physical implementation described by the panel object
         self.req_panel_attr.extend(['speaker', 'response_port', 'reward'])
 
+        ### Subject object here
+
         # Columns for the CSV file where data is written
+        # This should go in a subject object
         self.fields_to_save = ['session',
                                'index',
                                'time',
@@ -75,12 +72,20 @@ class GoNoGoInterrupt(base.BaseExp):
                                'max_wait',
                                ]
 
-        # The output file where data should be written
-        csv_filename = "%s_trialdata_%s.csv" % (self.parameters["subject"], self.timestamp)
-        self.data_csv = os.path.join(self.parameters['experiment_path'], csv_filename)
+        # Create a subject object
+        self.subject = Subject(name=self.subject_name, datastore="csv", output_path="/path/to/datastore")
 
         # This sets up the reinforcement schedule. Defaults to continuous where every correct trial is rewarded
         self.reinf_sched = reinf.ContinuousReinforcement()
+
+        # Begin rewrite
+        # Generate stimulus class objects rewarded_stimuli and nonrewarded_stimuli
+        rewarded_stimuli = StimClass(name="Reward", path=stim_path)
+        nonrewarded_stimuli = StimClass(name="Unrewarded", path=other_stim_path)
+        # self.trial_queue = queues.RandomQueue([(rewarded_stimuli, reward_probability), (nonrewarded_stimuli, 1 - reward_probability)])
+        # Maybe this should be a BlockHandler?
+        self.blocks = BlockHandler(queue=queues.random_queue)
+        self.blocks = queues.RandomQueue()
 
         # Add weights to random queue to adjust the probability of a go stim GROSSS
         default_block = dict(queue="random",
@@ -102,23 +107,15 @@ class GoNoGoInterrupt(base.BaseExp):
         self.trials = []
         self.session_id = 0
 
-        #Initialize the queues as None. They will be created as iterators in session_main()
-        self.trial_queue = None
-        self.session_queue = None
-
-        # Initialize data CSV
-        self.log.debug("Initializing CSV file to output data: %s" % self.data_csv)
-        self.make_data_csv()
-
-    def make_data_csv(self):
-        """ Create the csv file to save trial data
-
-        This creates a new csv file at experiment.data_csv and writes a header row
-        with the fields in experiment.fields_to_save
+    def shape(self):
         """
-        with open(self.data_csv, 'wb') as data_fh:
-            trialWriter = csv.writer(data_fh)
-            trialWriter.writerow(self.fields_to_save)
+        This will house a method to run shaping.
+        """
+
+        pass
+
+
+    # Stupid scheduling shit. Need to rethink this
 
     def check_session_schedule(self):
         """ Check the session schedule
@@ -164,42 +161,21 @@ class GoNoGoInterrupt(base.BaseExp):
 
         """
 
-        def run_trial_queue():
-            for tr_cond in self.trial_queue:
-                self.new_trial(tr_cond)
-                self.run_trial()
-                self.log.debug("Moving to next trial")
-            self.trial_queue = None
+        # What we want!
+        for block in self.blocks:
+            for trial in block.trials:
+                trial.run()
+        #
+        # def run_trial_queue():
+        #     for tr_cond in self.trial_queue:
+        #         self.new_trial(tr_cond)
+        #         self.run_trial()
+        #         self.log.debug("Moving to next trial")
 
-        # This is the default if no session has been run
-        if self.session_queue is None:
-            self.log.debug("Generating session queue")
-            self.session_queue = queues.block_queue(self.parameters['block_design']['order'])
 
-        if self.trial_queue is None:
-            # This is looping through queues.block_queue which is yielding a random block
-            for sn_cond in self.session_queue:
-
-                self.trials = []
-                self.session_id += 1
-
-                self.session_start_time = dt.datetime.now()
-                self.log.info("Session %d began at %s with condition %s" % (self.session_id, self.session_start_time.ctime(), sn_cond))
                 # grab the block details
                 # A dictionary with the block queue type (e.g. random) and a list of classes (e.g. L) This nomenclature is rough. Classes are conditions, it seems
                 blk = copy.deepcopy(self.parameters['block_design']['blocks'][sn_cond])
-
-                # load the block details into the trial queue
-                q_type = blk.pop('queue')
-                if q_type=='random':
-                    self.log.debug("Creating random trial queue")
-                    self.trial_queue = queues.random_queue(**blk)
-                elif q_type=='block':
-                    self.log.debug("Creating blocked trial queue")
-                    self.trial_queue = queues.block_queue(**blk)
-                elif q_type=='staircase':
-                    self.log.debug("Creating staircase trial queue")
-                    self.trial_queue = queues.staircase_queue(self, **blk)
 
                 # Load up stimuli - Probably need this to happen because we need fast stimulus triggering
                 # self.load_trials()
@@ -265,30 +241,31 @@ class GoNoGoInterrupt(base.BaseExp):
 
         return True
 
-    def get_stimuli(self,**conditions):
-        """ Get the trial's stimuli from the conditions
+    # Now encapsulated in stimulus condition object
+    # def get_stimuli(self,**conditions):
+    #     """ Get the trial's stimuli from the conditions
+    #
+    #     Returns
+    #     -------
+    #     stim, epochs : Event, list
+    #
+    #
+    #     """
+    #     stim_file = random.choice(self.parameters['stims'][conditions["class"]])
+    #     stim = utils.auditory_stim_from_wav(stim_file)
+    #     return stim
 
-        Returns
-        -------
-        stim, epochs : Event, list
-
-
-        """
-        stim_file = random.choice(self.parameters['stims'][conditions["class"]])
-        stim = utils.auditory_stim_from_wav(stim_file)
-        return stim
-
-    def run_trial(self):
-
-        utils.run_state_machine(start_in="trial_pre",
-                                error_state="trial_post", # probably should do some error handling
-                                error_callback=self.log_error_callback,
-                                stimulus_pre=self.stimulus_pre,
-                                stimulus_main=self.stimulus_main,
-                                response=self.response_main,
-                                reward=self.reward_main,
-                                trial_pre=self.trial_pre,
-                                trial_post=self.trial_post)
+    # def run_trial(self):
+    #
+    #     utils.run_state_machine(start_in="trial_pre",
+    #                             error_state="trial_post", # probably should do some error handling
+    #                             error_callback=self.log_error_callback,
+    #                             stimulus_pre=self.stimulus_pre,
+    #                             stimulus_main=self.stimulus_main,
+    #                             response=self.response_main,
+    #                             reward=self.reward_main,
+    #                             trial_pre=self.trial_pre,
+    #                             trial_post=self.trial_post)
 
     def trial_pre(self):
         ''' this is where we initialize a trial'''
@@ -296,14 +273,11 @@ class GoNoGoInterrupt(base.BaseExp):
         self.this_trial.annotate(min_wait=0.1)
         self.this_trial.annotate(max_wait=self.this_trial.stimulus_event.duration)
 
-        return "stimulus_pre"
-
     def stimulus_pre(self):
         # wait for bird to peck
         self.log.debug("stimulus_pre - queuing file in speaker")
         self.panel.speaker.queue(self.this_trial.stimulus_event.file_origin)
         self.log.debug("wavfile queued")
-        return "stimulus_main"
 
     def stimulus_main(self):
         ##play stimulus
@@ -317,45 +291,91 @@ class GoNoGoInterrupt(base.BaseExp):
         self.panel.speaker.play() # already queued in stimulus_pre()
         self.log.debug("played stimulus")
 
-        return "response"
+    def stimulus_post(self):
+
+        pass
+
+    def response_pre(self):
+
+        pass
 
     def response_main(self):
 
         self.log.debug("response_main")
+
         utils.wait(self.this_trial.annotations["min_wait"])
         self.log.debug("waited %3.2f seconds" % self.this_trial.annotations["min_wait"])
-        self.this_trial.peck_time = self.panel.response_port.poll(self.this_trial.annotations['max_wait'])
+
+        self.this_trial.response_time = self.panel.response_port.poll(self.this_trial.annotations['max_wait'])
         self.log.debug("Received peck or timeout. Stopping playback")
+
         self.panel.speaker.stop()
         self.log.debug("Playback stopped")
-        if self.this_trial.peck_time is None:
-            self.log.debug("No peck detected")
-            self.this_trial.response = 0
-            if self.this_trial.class_ == "NoGo":
-                self.log.debug("No Go stimulus. Giving reward")
-                self.this_trial.correct = 1
-                self.this_trial.reward = 1
-                return "reward"
-            else:
-                self.log.debug("Go stimulus. No reward")
-                self.this_trial.correct = 0
-                self.this_trial.reward = 0
-                return "trial_post"
 
+        if self.this_trial.peck_time is None:
+            self.this_trial.response = 0
         else:
             self.this_trial.response = 1
+            self.this_trial.rt = self.this_trial.response_time - self.this_trial.time
 
-            if self.this_trial.class_ == "Go":
-                self.this_trial.correct = 1
+
+        # if self.this_trial.peck_time is None:
+        #     self.log.debug("No peck detected")
+        #     self.this_trial.response = 0
+        #     # self.this_trial.response = 0
+        #     # if self.this_trial.class_ == "NoGo":
+        #     #     self.log.debug("No Go stimulus. Giving reward")
+        #     #     self.this_trial.correct = 1
+        #     #     self.this_trial.reward = 1
+        #     #     return "reward"
+        #     # else:
+        #     #     self.log.debug("Go stimulus. No reward")
+        #     #     self.this_trial.correct = 0
+        #     #     self.this_trial.reward = 0
+        #     #     return "trial_post"
+        #
+        # else:
+        #     self.this_trial.response = 1
+        #
+        #     if self.this_trial.class_ == "Go":
+        #         self.this_trial.correct = 1
+        #     else:
+        #         self.this_trial.correct = 0
+        #     self.this_trial.rt = self.this_trial.peck_time - self.this_trial.time
+        #     self.this_trial.reward = 0
+        #
+        #     self.log.info("Peck detected. RT = %3.2f" % self.this_trial.rt.total_seconds())
+        #     return "trial_post"
+
+    def response_post(self):
+
+        pass
+
+    def consequate_pre(self):
+
+        pass
+
+    def consequate_main(self):
+
+        if self.this_trial.response == self.this_trial.stimulus_condition.response:
+            self.this_trial.correct = True
+        else:
+            self.this_trial.correct = False
+
+        # This is maybe a bit overly done
+        if self.reinforcement.consequate(self.this_trial): # Should we reinforce?
+            if self.this_trial.correct:
+                self.reward()
             else:
-                self.this_trial.correct = 0
-            self.this_trial.rt = self.this_trial.peck_time - self.this_trial.time
-            self.this_trial.reward = 0
+                self.punish()
+        else:
+            pass
 
-            self.log.info("Peck detected. RT = %3.2f" % self.this_trial.rt.total_seconds())
-            return "trial_post"
+    def consequate_post(self):
 
-    def reward_main(self):
+        pass
+
+    def reward(self):
 
         self.log.debug("reward_main")
         self.summary['feeds'] += 1
@@ -363,7 +383,9 @@ class GoNoGoInterrupt(base.BaseExp):
         self.log.info("Supplying reward for %3.2f seconds" % value)
         reward_event = self.panel.reward(value=value)
 
-        return "trial_post"
+    def punish(self):
+
+        self.log.debug("punish")
 
     def trial_post(self):
         '''things to do at the end of a trial'''
@@ -387,19 +409,19 @@ class GoNoGoInterrupt(base.BaseExp):
                 raise EndSession
 
 
-    def save_trial(self,trial):
-        '''write trial results to CSV'''
-
-        trial_dict = {}
-        for field in self.fields_to_save:
-            try:
-                trial_dict[field] = getattr(trial,field)
-            except AttributeError:
-                trial_dict[field] = trial.annotations[field]
-
-        with open(self.data_csv,'ab') as data_fh:
-            trialWriter = csv.DictWriter(data_fh,fieldnames=self.fields_to_save,extrasaction='ignore')
-            trialWriter.writerow(trial_dict)
+    # def save_trial(self,trial):
+    #     '''write trial results to CSV'''
+    #
+    #     trial_dict = {}
+    #     for field in self.fields_to_save:
+    #         try:
+    #             trial_dict[field] = getattr(trial,field)
+    #         except AttributeError:
+    #             trial_dict[field] = trial.annotations[field]
+    #
+    #     with open(self.data_csv,'ab') as data_fh:
+    #         trialWriter = csv.DictWriter(data_fh,fieldnames=self.fields_to_save,extrasaction='ignore')
+    #         trialWriter.writerow(trial_dict)
 
     def session_post(self):
         """ Closes out the sessions
