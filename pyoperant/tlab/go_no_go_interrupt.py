@@ -52,9 +52,9 @@ class GoNoGoInterrupt(base.BaseExp):
         super(GoNoGoInterrupt,  self).__init__(*args, **kwargs)
 
         # Which components must be present in the panel
-        # Should move this to: "stimulus", "response_port", "initialization_port", "reward"
+        # Should move this to: "stimulus", "response_port", "reward"
         # Make it describe the behavior and then have the physical implementation described by the panel object
-        self.req_panel_attr.extend(['speaker', 'response_port', 'reward'])
+        self.req_panel_attr.extend(['speaker', 'response_port', 'reward', 'ready', 'idle'])
 
         ### Subject object here
 
@@ -76,7 +76,7 @@ class GoNoGoInterrupt(base.BaseExp):
         self.subject = Subject(name=self.subject_name, datastore="csv", output_path="/path/to/datastore")
 
         # This sets up the reinforcement schedule. Defaults to continuous where every correct trial is rewarded
-        self.reinf_sched = reinf.ContinuousReinforcement()
+        self.reinforcement = reinf.ContinuousReinforcement()
 
         # Begin rewrite
         # Generate stimulus class objects rewarded_stimuli and nonrewarded_stimuli
@@ -117,18 +117,19 @@ class GoNoGoInterrupt(base.BaseExp):
 
     # Stupid scheduling shit. Need to rethink this
 
-    def check_session_schedule(self):
-        """ Check the session schedule
-
-        Returns
-        -------
-        bool
-            True if sessions should be running
-        """
-        if len(self.parameters["session_schedule"]):
-            return utils.check_time(self.parameters['session_schedule'])
-        else:
-            return False
+    # Use self.this_block.check_complete() instead
+    # def check_session_schedule(self):
+    #     """ Check the session schedule
+    #
+    #     Returns
+    #     -------
+    #     bool
+    #         True if sessions should be running
+    #     """
+    #     if len(self.parameters["session_schedule"]):
+    #         return utils.check_time(self.parameters['session_schedule'])
+    #     else:
+    #         return False
 
     def schedule_current_session(self):
 
@@ -162,7 +163,8 @@ class GoNoGoInterrupt(base.BaseExp):
         """
 
         # What we want!
-        for block in self.blocks:
+        self.
+        for self.this_block in self.blocks:
             for trial in block.trials:
                 trial.run()
         #
@@ -175,18 +177,19 @@ class GoNoGoInterrupt(base.BaseExp):
 
                 # grab the block details
                 # A dictionary with the block queue type (e.g. random) and a list of classes (e.g. L) This nomenclature is rough. Classes are conditions, it seems
-                blk = copy.deepcopy(self.parameters['block_design']['blocks'][sn_cond])
+                # blk = copy.deepcopy(self.parameters['block_design']['blocks'][sn_cond])
 
                 # Load up stimuli - Probably need this to happen because we need fast stimulus triggering
                 # self.load_trials()
 
                 # Turn on the center light
                 self.log.debug("Turning response port light on to start the session")
-                self.panel.response_port.on()
+                # Maybe move to self.panel.ready() and self.panel.idle()
+                self.panel.ready()
 
-                # Poll for a response
+                # Poll for a response - This should now happen in the trial_pre section
                 self.log.debug("Begin polling for the initial peck")
-                self.first_trial_start = self.panel.response_port.poll()
+                # self.first_trial_start = self.panel.response_port.poll()
 
                 # Once a peck is registered, begin the trial and set the session schedule
                 self.log.info("First peck registered at %s" % self.first_trial_start.ctime())
@@ -209,37 +212,37 @@ class GoNoGoInterrupt(base.BaseExp):
         return 'post'
 
     ## Trial Flow
-    def new_trial(self, conditions=None):
-        """Creates a new trial and appends it to the trial list
-
-        If `self.do_correction` is `True`, then the conditions are ignored and a new
-        trial is created which copies the conditions of the last trial.
-
-        Parameters
-        ----------
-        conditions : dict
-            The conditions dict must have a 'class' key, which specifies the trial
-            class. The entire dict is passed to `exp.get_stimuli()` as keyword
-            arguments and saved to the trial annotations.
-
-        """
-
-        index = len(self.trials)
-        trial = utils.Trial(index=index)
-        trial.class_ = conditions['class']
-        trial_stim = self.get_stimuli(**conditions)
-        trial.stimulus_event = trial_stim
-        trial.stimulus = trial.stimulus_event.name
-
-        trial.session = self.session_id
-        trial.annotate(**conditions)
-
-        self.trials.append(trial)
-        self.this_trial = trial
-
-
-
-        return True
+    # def new_trial(self, conditions=None):
+    #     """Creates a new trial and appends it to the trial list
+    #
+    #     If `self.do_correction` is `True`, then the conditions are ignored and a new
+    #     trial is created which copies the conditions of the last trial.
+    #
+    #     Parameters
+    #     ----------
+    #     conditions : dict
+    #         The conditions dict must have a 'class' key, which specifies the trial
+    #         class. The entire dict is passed to `exp.get_stimuli()` as keyword
+    #         arguments and saved to the trial annotations.
+    #
+    #     """
+    #
+    #     index = len(self.trials)
+    #     trial = utils.Trial(index=index)
+    #     trial.class_ = conditions['class']
+    #     trial_stim = self.get_stimuli(**conditions)
+    #     trial.stimulus_event = trial_stim
+    #     trial.stimulus = trial.stimulus_event.name
+    #
+    #     trial.session = self.session_id
+    #     trial.annotate(**conditions)
+    #
+    #     self.trials.append(trial)
+    #     self.this_trial = trial
+    #
+    #
+    #
+    #     return True
 
     # Now encapsulated in stimulus condition object
     # def get_stimuli(self,**conditions):
@@ -269,9 +272,8 @@ class GoNoGoInterrupt(base.BaseExp):
 
     def trial_pre(self):
         ''' this is where we initialize a trial'''
-        self.log.debug("trial_pre")
-        self.this_trial.annotate(min_wait=0.1)
-        self.this_trial.annotate(max_wait=self.this_trial.stimulus_event.duration)
+        if not self.start_immediately:
+            self.response_port.poll()
 
     def stimulus_pre(self):
         # wait for bird to peck
@@ -394,19 +396,19 @@ class GoNoGoInterrupt(base.BaseExp):
         self.summary['trials'] += 1
         self.summary['last_trial_time'] = self.this_trial.time.ctime()
 
-        self.log.debug("Saving trial data")
-        self.save_trial(self.this_trial)
+        # self.log.debug("Saving trial data")
+        # self.save_trial(self.this_trial)
 
         if self.check_session_schedule()==False:
             self.log.debug("Session has run long enough. Ending")
             raise EndSession
 
-        if self.this_trial.peck_time is None:
-            self.log.debug("Waiting for peck to start a new trial")
-            timeout = (self.session_end_time - dt.datetime.now()).total_seconds()
-            pecked = self.panel.response_port.poll(timeout)
-            if pecked is None:
-                raise EndSession
+        # if self.this_trial.peck_time is None:
+        #     self.log.debug("Waiting for peck to start a new trial")
+        #     timeout = (self.session_end_time - dt.datetime.now()).total_seconds()
+        #     pecked = self.panel.response_port.poll(timeout)
+        #     if pecked is None:
+        #         raise EndSession
 
 
     # def save_trial(self,trial):
@@ -428,8 +430,8 @@ class GoNoGoInterrupt(base.BaseExp):
         """
         # If session id is less than number of sessions for the day, set the session schedule for the next start
         self.session_end_time = dt.datetime.now()
-        self.session_queue = None
-        self.trial_queue = None
+        # self.session_queue = None
+        # self.trial_queue = None
         self.log.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
         if self.session_id < self.parameters["num_sessions"]:
             self.schedule_next_session()

@@ -65,7 +65,13 @@ class TLabPanel(panels.BasePanel):
 
     def reward(self, duration=10.0):
 
-        return self.hopper.reward(duration)
+        self.hopper.up()
+        peck_time = self.peck_port.poll(duration)
+        self.hopper.down()
+        if peck_time is not None:
+            return peck_time
+
+        return True
 
     def punish(self):
 
@@ -93,6 +99,20 @@ class TLabPanel(panels.BasePanel):
         self.peck_port.poll(10)
         self.reset()
         return True
+
+    def calibrate(self):
+
+        pass
+
+    def ready(self):
+
+        self.peck_port.on()
+
+    def idle(self):
+
+        self.peck_port.off()
+
+
 
 PANELS = {"Box1": TLabPanel(id=1),
           "Box2": TLabPanel(id=2)}

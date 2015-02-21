@@ -27,6 +27,15 @@ class Trial(Event):
         self.stim_event = None
 
     def run(self):
+        """
+        This is where the basic trial structure is encoded. The main structure
+        is as follows: Get stimulus -> Initiate trial -> Play stimulus ->
+        Receive response ->  Consequate response -> Finish trial -> Save data.
+        The stimulus, response and consequate stages are broken into pre, main,
+        and post stages. This seems a bit too subdivided, and it may be, but a
+        pre and post stage allow for a clean place to put delays between stages.
+        """
+
 
         # Get the stimulus
         self.stimulus = self.stimulus_condition.get()
@@ -58,13 +67,31 @@ class Trial(Event):
 
 class Block(Event):
 
-    def __init__(self, index=None):
+    def __init__(self, index=None, max_trials):
 
         super(Block, self).__init__(*args, **kwargs)
         self.index = index
         self.trials = None
 
-    def schedule(self, start, end):
+    def check_completion(self):
 
-        self.start = start
-        self.end = end
+        if self.end is not None:
+            if utils.check_time((self.start, self.end)): # Will start ever be none? Shouldn't be.
+                return True # Block is complete
+
+        if self.max_trials is not None:
+            if self.num_trials >= self.max_trials:
+                return True
+
+        return False
+
+
+class Session(Event):
+
+    def __init__(self):
+
+        super(Session, self).__init__(index=0, experiment=None)
+        self.index = index
+        self.blocks = list()
+        self.experiment = experiment
+        
