@@ -1,5 +1,12 @@
 from numpy import random
 
+SCHEDULE_DICT = dict(continuous=ContinuousReinforcement,
+                     fixed=FixedRatioSchedule,
+                     fixedratio=FixedRatioSchedule,
+                     variable=VariableRatioSchedule,
+                     variableratio=VariableRatioSchedule,
+                     percent=PercentReinforcement)
+
 class BaseSchedule(object):
     """Maintains logic for deciding whether to consequate trials.
 
@@ -11,6 +18,7 @@ class BaseSchedule(object):
         should be consequated. Always returns True.
 
     """
+
     def __init__(self):
         super(BaseSchedule, self).__init__()
 

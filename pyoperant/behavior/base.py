@@ -1,11 +1,9 @@
 import logging, traceback
 import os, sys, socket
 import datetime as dt
-from pyoperant import utils, components, local, hwio
+from pyoperant import utils, components, local, hwio, configure
 from pyoperant import ComponentError, InterfaceError
 from pyoperant.behavior import shape
-
-
 try:
     import simplejson as json
 except ImportError:
@@ -34,6 +32,15 @@ class BaseExp(object):
     run() -- runs the experiment
 
     """
+
+    # This should contain all states to be used in the state machine.
+    # "idle" is the only one that is required.
+    STATE_DICT = dict(idle=states.Idle,
+                      sleep=states.Sleep,
+                      session=states.Session)
+
+    req_panel_attr = ["sleep", "reset"]
+
     def __init__(self,
                  name='',
                  description='',
@@ -45,10 +52,12 @@ class BaseExp(object):
                  stim_path='',
                  subject='',
                  panel=None,
-                 log_handlers=[],
+                 log_handlers=None,
                  *args, **kwargs):
+
         super(BaseExp,  self).__init__()
 
+        # Initialize experiment parameters received as input
         self.name = name
         self.description = description
         self.debug = debug
@@ -57,7 +66,6 @@ class BaseExp(object):
         self.parameters['filetime_fmt'] = filetime_fmt
         self.parameters['light_schedule'] = light_schedule
         self.parameters['idle_poll_interval'] = idle_poll_interval
-
         self.parameters['experiment_path'] = experiment_path
         if stim_path == '':
             self.parameters['stim_path'] = os.path.join(experiment_path,'stims')
@@ -66,76 +74,119 @@ class BaseExp(object):
         self.parameters['subject'] = subject
 
         # configure logging
+        if not log_handlers:
+            log_handlers = dict()
         self.parameters['log_handlers'] = log_handlers
         self.log_config()
+        self.add_file_handler()
+        for handler_config in log_handlers.keys():
+            if handler.config == "email":
+                self.add_email_handler()
 
-        self.req_panel_attr= ['house_light',
-                              'reset',
-                              ]
         self.panel = panel
-        self.log.debug('panel %s initialized' % self.parameters['panel_name'])
-
-        if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
-            self.parameters['shape'] = None
-
-        self.shaper = shape.Shaper(self.panel, self.log, self.parameters, self.log_error_callback)
+        self.log.info('panel %s initialized' % self.parameters['panel_name'])
+        #
+        # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
+        #     self.parameters['shape'] = None
+        #
+        # self.shaper = shape.Shaper(self.panel, self.log, self.parameters, self.log_error_callback)
 
     def save(self):
         self.snapshot_f = os.path.join(self.parameters['experiment_path'], self.timestamp+'.json')
-        with open(self.snapshot_f, 'wb') as config_snap:
-            json.dump(self.parameters, config_snap, sort_keys=True, indent=4)
+        self.log.debug("Saving snapshot of parameters to %s" % self.snapshot_f)
+        if self.snapshot_f.lower().endswith(".json"):
+            configure.ConfigureJSON.save(self.parameters, self.snapshot_f)
+        elif self.snapshot_f.lower().endswith(".yaml"):
+            configure.ConfigureYAML.save(self.parameters, self.snapshot_f)
 
+    # Logging configure methods
     def log_config(self):
-
-        self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
 
         if self.debug:
             self.log_level = logging.DEBUG
         else:
             self.log_level = logging.INFO
-
         sys.excepthook = _log_except_hook # send uncaught exceptions to log file
 
-        logging.basicConfig(filename=self.log_file,
-                            level=self.log_level,
+        logging.basicConfig(level=self.log_level,
                             format='"%(asctime)s","%(levelname)s","%(message)s"')
-        self.log = logging.getLogger()
+        self.log = logging.getLogger(self.__class__.__name__)
 
-        if 'email' in self.parameters['log_handlers']:
-            from pyoperant.local import SMTP_CONFIG
-            from logging import handlers
-            SMTP_CONFIG['toaddrs'] = [self.parameters['experimenter']['email'],]
+    def add_file_handler(self):
 
-            email_handler = handlers.SMTPHandler(**SMTP_CONFIG)
-            email_handler.setLevel(logging.WARNING)
+        self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
+        props = dict()
+        if "file" in self.parameters["log_handlers"]:
+            props = self.parameters["log_handlers"]["file"]
+            if props["filename"]:
+                self.log_file = os.path.join(self.parameters["experiment_path"], props["filename"])
 
-            heading = '%s\n' % (self.parameters['subject'])
-            formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
-            email_handler.setFormatter(formatter)
+        file_handler = logging.handlers.FileHandler()
+        level = props.get("level", self.log_level)
+        file_handler.setLevel(level)
+        self.log.addHandler(file_handler)
+        self.log.debug("File handler added to %s with level %d" % (self.log_file, level))
 
-            self.log.addHandler(email_handler)
+    def add_email_handler(self):
 
+        handler_config = self.properties["log_handlers"]["email"]
+        level = handler_config.pop("level", logging.ERROR)
+        email_handler = logging.handlers.SMTPHandler(**handler_config)
+        email_handler.setLevel(level)
+
+        heading = '%s\n' % (self.parameters['subject'])
+        formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
+        email_handler.setFormatter(formatter)
+        self.log.addHandler(email_handler)
+        self.log.debug("Email handler added to %s with level %d" % (",".join(email_handler.toaddrs), level))
+
+    # Scheduling methods
     def check_light_schedule(self):
         """returns true if the lights should be on"""
-        return utils.check_time(self.parameters['light_schedule'])
+
+        lights_on = utils.check_time(self.parameters['light_schedule'])
+        self.log.debug("Checking light schedule: %s" % lights_on)
+        return lights_on
 
     def check_session_schedule(self):
         """returns True if the subject should be running sessions"""
-        return False
 
-    def panel_reset(self):
-        try:
-            self.panel.reset()
-        except components.ComponentError as err:
-            self.log.error("component error: %s" % str(err))
+        session_on = False
+        if "session_schedule" in self.parameters:
+            session_on = utils.check_time(self.parameters["session_schedule"])
 
+        self.log.debug("Checking session schedule: %s" % session_on)
+        return session_on
+
+    def schedule_current_session(self):
+
+        duration = self.parameters.get("session_duration", -dt.timedelta(minutes=1))
+        start = getattr(self, "session_start_time", dt.datetime.now())
+        schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
+        self.parameters.setdefault("session_schedule", []).append(schedule)
+        self.log.debug("Scheduled current session for %s" % " to ".join(schedule))
+
+    def schedule_next_session(self):
+
+        current_time = dt.datetime.now()
+        delay = self.parameters.get("intersession_interval", -dt.timedelta(minutes=1))
+        start = current_time + delay
+        stop = current_time - dt.timedelta(minutes=1)
+        schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
+        self.parameters.setdefault("session_schedule", []).append(schedule)
+        self.log.debug("Scheduled next session for %s" % " to ".join(schedule))
+
+    # State and trial logic. It might be good to have these methods do some common sense functions / logging
     def run(self):
 
         for attr in self.req_panel_attr:
-            assert hasattr(self.panel,attr)
-        self.panel_reset()
+            self.log.debug("Checking that panel has attribute %s" % attr)
+            assert hasattr(self.panel, attr)
+
+        self.log.debug("Resetting panel")
+        self.panel.reset()
         self.save()
-        self.init_summary()
+        # self.init_summary()
 
         self.log.info('%s: running %s with parameters in %s' % (self.name,
                                                                 self.__class__.__name__,
@@ -143,78 +194,58 @@ class BaseExp(object):
                                                                 )
                       )
         if self.parameters['shape']:
-                self.shaper.run_shape(self.parameters['shape'])
-        while True: #is this while necessary
-            utils.run_state_machine(start_in='idle',
-                                    error_state='idle',
-                                    error_callback=self.log_error_callback,
-                                    idle=self._run_idle,
-                                    sleep=self._run_sleep,
-                                    session=self._run_session)
+            self.log.info("Running shaping")
+            self.shaper.run_shape(self.parameters['shape'])
 
-    def _run_idle(self):
-        if self.check_light_schedule() == False:
-            return 'sleep'
-        elif self.check_session_schedule():
-            return 'session'
-        else:
-            self.panel_reset()
-            self.log.debug('idling...')
-            utils.wait(self.parameters['idle_poll_interval'])
-            return 'idle'
-
-
-
-    # defining functions for sleep
-    def sleep_pre(self):
-        self.log.debug('lights off. going to sleep...')
-        return 'main'
-
-    def sleep_main(self):
-        """ reset expal parameters for the next day """
-        self.log.debug('sleeping...')
-        self.panel.house_light.off()
-        utils.wait(self.parameters['idle_poll_interval'])
-        if self.check_light_schedule() == False:
-            return 'main'
-        else:
-            return 'post'
-
-    def sleep_post(self):
-        self.log.debug('ending sleep')
-        self.panel.house_light.on()
-        self.init_summary()
-        return None
-
-    def _run_sleep(self):
-        utils.run_state_machine(start_in='pre',
-                                error_state='post',
-                                error_callback=self.log_error_callback,
-                                pre=self.sleep_pre,
-                                main=self.sleep_main,
-                                post=self.sleep_post)
-        return 'idle'
+        while True:
+            self.log.debug("Entering state machine")
+            states.run_state_machine(start_in='idle',
+                                     error_state='idle',
+                                     **self.STATE_DICT)
 
     # session
-
     def session_pre(self):
-        return 'main'
+        pass
 
     def session_main(self):
-        return 'post'
+        pass
 
     def session_post(self):
-        return None
+        pass
 
-    def _run_session(self):
-        utils.run_state_machine(start_in='pre',
-                                error_state='post',
-                                error_callback=self.log_error_callback,
-                                pre=self.session_pre,
-                                main=self.session_main,
-                                post=self.session_post)
-        return 'idle'
+    # Defining the different trial states. If any of these are not needed by the behavior, just don't define them in your subclass
+    def trial_pre(self):
+        pass
 
+    def stimulus_pre(self):
+        pass
+
+    def stimulus_main(self):
+        pass
+
+    def stimulus_post(self):
+        pass
+
+    def response_pre(self):
+        pass
+
+    def response_main(self):
+        pass
+
+    def response_post(self):
+        pass
+
+    def consequate_pre(self):
+        pass
+
+    def consequate_main(self):
+        pass
+
+    def consequate_post(self):
+        pass
+
+    def trial_post(self):
+        pass
 
     # gentner-lab specific functions
     def init_summary(self):

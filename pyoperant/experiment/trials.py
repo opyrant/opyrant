@@ -1,3 +1,6 @@
+
+from pyoperant.utils import Event
+
 class Trial(Event):
     """docstring for Trial"""
     def __init__(self,
@@ -7,14 +10,15 @@ class Trial(Event):
                  stimulus_condition=None,
                  subject=None,
                  *args, **kwargs):
+
         super(Trial, self).__init__(*args, **kwargs)
-        self.label = 'trial
+        self.label = 'trial'
         self.index = index
 
         # Object references
         self.experiment = experiment
         self.block = block
-        self.stimulus_condition = stimulus_condition
+        self.condition = stimulus_condition
         self.subject = subject
 
         self.stimulus = None
@@ -36,6 +40,7 @@ class Trial(Event):
         pre and post stage allow for a clean place to put delays between stages.
         """
 
+        self.experiment.this_trial = self
 
         # Get the stimulus
         self.stimulus = self.stimulus_condition.get()
@@ -67,10 +72,11 @@ class Trial(Event):
 
 class Block(Event):
 
-    def __init__(self, index=None, max_trials):
+    def __init__(self, index=None, max_trials=None):
 
         super(Block, self).__init__(*args, **kwargs)
         self.index = index
+        self.max_trials = max_trials
         self.trials = None
 
     def check_completion(self):
@@ -84,14 +90,3 @@ class Block(Event):
                 return True
 
         return False
-
-
-class Session(Event):
-
-    def __init__(self):
-
-        super(Session, self).__init__(index=0, experiment=None)
-        self.index = index
-        self.blocks = list()
-        self.experiment = experiment
-        

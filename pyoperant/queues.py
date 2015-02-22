@@ -1,14 +1,31 @@
 import random
 import numpy as np
 
-
 class BaseHandler(object):
 
-    def __init__(self, queue=random_queue, queue_parameters=None):
+    QUEUE_MAP = {"random": random_queue,
+                 "block": block_queue,
+                 "staircase": staircase_queue,
+                 }
+
+    def __init__(self, queue=random_queue, items=None, weights=None, queue_parameters=None):
 
         if queue_parameters is None:
             queue_parameters = dict()
-        self.queue = queue(**queue_parameters)
+
+        if queue is random_queue:
+            if weights is not None:
+                items = zip(items, weights)
+
+        if isinstance(queue, str):
+            try:
+                queue = QUEUE_MAP[queue]
+            except KeyError:
+                raise KeyError("Unknown queue type %s" % queue)
+        if not hasattr(queue, "__call__"):
+            raise TypeError("queue must be a callable function")
+
+        self.queue = queue(items=items, **queue_parameters)
 
     def __iter__(self):
 
@@ -18,23 +35,17 @@ class BaseHandler(object):
 
 class BlockHandler(BaseHandler):
 
-    def __init__(self, queue=random_queue, trials=None, queue_paramters=None):
+    def __init__(self, queue=random_queue, blocks=None, weights=None, queue_paramters=None):
 
-        if queue_parameters is None:
-            queue_parameters = dict()
-        queue_parameters["items"] = trials
         super(BlockHandler, self).__init__(queue=queue, queue_parameters=queue_parameters)
 
 
 class TrialHandler(BaseHandler):
     # Needs more thought. Where should weights be specified? stimulus_conditions??? D:
 
-    def __init__(self, queue=random_queue, stimulus_conditions=None, queue_parameters=None):
+    def __init__(self, queue=random_queue, stimulus_conditions=None, weights=None, queue_parameters=None):
 
-        if queue_parameters is None:
-            queue_parameters = dict()
-        queue_parameters["items"] = stimulus_conditions
-        super(TrialHandler, self).__init__(queue=queue, queue_parameters=queue_parameters)
+        super(TrialHandler, self).__init__(queue=queue, items=stimulus_conditions, weights=weights, queue_parameters=queue_parameters)
         self.stimulus_conditions = stimulus_conditions
 
 

@@ -19,11 +19,10 @@ class ArduinoInterface(base_.BaseInterface):
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
-    TODO: __str__ and __repr__ methods.
     TODO: Raise reasonable exceptions.
     TODO:
     """
-    def __init__(self, device_name, baud_rate=9600, *args, **kwargs):
+    def __init__(self, device_name, baud_rate=9600, inputs=None, outputs=None, *args, **kwargs):
 
         super(ArduinoInterface, self).__init__(*args, **kwargs)
 
@@ -37,6 +36,12 @@ class ArduinoInterface(base_.BaseInterface):
         self.outputs = []
 
         self.open()
+        if inputs is not None:
+            for input_ in inputs:
+                self._config_read(*input_)
+        if outputs is not None:
+            for output in outputs:
+                self._config_write(output)
 
     def __str__(self):
 
@@ -78,6 +83,11 @@ class ArduinoInterface(base_.BaseInterface):
         else:
             self.device.write(self._make_arg(channel, 5))
 
+        if channel in self.outputs:
+            self.outputs.remove(channel)
+        if channel not in self.inputs:
+            self.inputs.append(channel)
+
         self._state[channel] = dict(invert=pullup, pressed=False)
 
     def _config_write(self, channel):
@@ -87,6 +97,10 @@ class ArduinoInterface(base_.BaseInterface):
         '''
 
         self.device.write(self._make_arg(channel, 3))
+        if channel in self.inputs:
+            self.inputs.remove(channel)
+        if channel not in self.outputs:
+            self.outputs.append(channel)
 
     def _read_bool(self, channel):
         ''' Read a value from the specified channel
