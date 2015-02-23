@@ -3,11 +3,9 @@ import os, sys, socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure
 from pyoperant import ComponentError, InterfaceError
-from pyoperant.behavior import shape
-try:
-    import simplejson as json
-except ImportError:
-    import json
+from pyoperant.experiment import states, trials
+
+logger = logging.getLogger(__name__)
 
 def _log_except_hook(*exc_info):
     text = "".join(traceback.format_exception(*exc_info))
@@ -39,7 +37,7 @@ class BaseExp(object):
                       sleep=states.Sleep,
                       session=states.Session)
 
-    req_panel_attr = ["sleep", "reset"]
+
 
     def __init__(self,
                  name='',
@@ -56,6 +54,7 @@ class BaseExp(object):
                  *args, **kwargs):
 
         super(BaseExp,  self).__init__()
+        REQ_PANEL_ATTR = ["sleep", "reset"]
 
         # Initialize experiment parameters received as input
         self.name = name
@@ -80,24 +79,25 @@ class BaseExp(object):
         self.log_config()
         self.add_file_handler()
         for handler_config in log_handlers.keys():
-            if handler.config == "email":
+            if handler_config == "email":
                 self.add_email_handler()
 
         self.panel = panel
-        self.log.info('panel %s initialized' % self.parameters['panel_name'])
+        self.req_panel_attr = REQ_PANEL_ATTR # Copy the list
+        logger.info('panel %s initialized' % self.parameters['panel_name'])
         #
         # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
         #     self.parameters['shape'] = None
         #
-        # self.shaper = shape.Shaper(self.panel, self.log, self.parameters, self.log_error_callback)
+        # self.shaper = shape.Shaper(self.panel, logger, self.parameters, self.log_error_callback)
 
     def save(self):
         self.snapshot_f = os.path.join(self.parameters['experiment_path'], self.timestamp+'.json')
-        self.log.debug("Saving snapshot of parameters to %s" % self.snapshot_f)
+        logger.debug("Saving snapshot of parameters to %s" % self.snapshot_f)
         if self.snapshot_f.lower().endswith(".json"):
-            configure.ConfigureJSON.save(self.parameters, self.snapshot_f)
+            configure.ConfigureJSON.save(self.parameters, self.snapshot_f, overwrite=True)
         elif self.snapshot_f.lower().endswith(".yaml"):
-            configure.ConfigureYAML.save(self.parameters, self.snapshot_f)
+            configure.ConfigureYAML.save(self.parameters, self.snapshot_f, overwrite=True)
 
     # Logging configure methods
     def log_config(self):
@@ -110,10 +110,11 @@ class BaseExp(object):
 
         logging.basicConfig(level=self.log_level,
                             format='"%(asctime)s","%(levelname)s","%(message)s"')
-        self.log = logging.getLogger(self.__class__.__name__)
 
     def add_file_handler(self):
-
+        """ Add a file handler to the root logger using either default
+        settings or settings from the config file
+        """
         self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
         props = dict()
         if "file" in self.parameters["log_handlers"]:
@@ -121,15 +122,18 @@ class BaseExp(object):
             if props["filename"]:
                 self.log_file = os.path.join(self.parameters["experiment_path"], props["filename"])
 
-        file_handler = logging.handlers.FileHandler()
+        file_handler = logging.FileHandler(self.log_file)
         level = props.get("level", self.log_level)
         file_handler.setLevel(level)
-        self.log.addHandler(file_handler)
-        self.log.debug("File handler added to %s with level %d" % (self.log_file, level))
+        logger = logging.getLogger()
+        logger.addHandler(file_handler)
+        logger.debug("File handler added to %s with level %d" % (self.log_file, level))
 
     def add_email_handler(self):
-
-        handler_config = self.properties["log_handlers"]["email"]
+        """Add an email handler to the root logger using configurations from the
+        config file.
+        """
+        handler_config = self.parameters["log_handlers"]["email"]
         level = handler_config.pop("level", logging.ERROR)
         email_handler = logging.handlers.SMTPHandler(**handler_config)
         email_handler.setLevel(level)
@@ -137,15 +141,16 @@ class BaseExp(object):
         heading = '%s\n' % (self.parameters['subject'])
         formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
         email_handler.setFormatter(formatter)
-        self.log.addHandler(email_handler)
-        self.log.debug("Email handler added to %s with level %d" % (",".join(email_handler.toaddrs), level))
+        logger = logging.getLogger()
+        logger.addHandler(email_handler)
+        logger.debug("Email handler added to %s with level %d" % (",".join(email_handler.toaddrs), level))
 
     # Scheduling methods
     def check_light_schedule(self):
         """returns true if the lights should be on"""
 
         lights_on = utils.check_time(self.parameters['light_schedule'])
-        self.log.debug("Checking light schedule: %s" % lights_on)
+        logger.debug("Checking light schedule: %s" % lights_on)
         return lights_on
 
     def check_session_schedule(self):
@@ -155,7 +160,7 @@ class BaseExp(object):
         if "session_schedule" in self.parameters:
             session_on = utils.check_time(self.parameters["session_schedule"])
 
-        self.log.debug("Checking session schedule: %s" % session_on)
+        logger.debug("Checking session schedule: %s" % session_on)
         return session_on
 
     def schedule_current_session(self):
@@ -164,7 +169,7 @@ class BaseExp(object):
         start = getattr(self, "session_start_time", dt.datetime.now())
         schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
         self.parameters.setdefault("session_schedule", []).append(schedule)
-        self.log.debug("Scheduled current session for %s" % " to ".join(schedule))
+        logger.info("Scheduled current session for %s" % " to ".join(schedule))
 
     def schedule_next_session(self):
 
@@ -174,32 +179,33 @@ class BaseExp(object):
         stop = current_time - dt.timedelta(minutes=1)
         schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
         self.parameters.setdefault("session_schedule", []).append(schedule)
-        self.log.debug("Scheduled next session for %s" % " to ".join(schedule))
+        logger.info("Scheduled next session for %s" % " to ".join(schedule))
 
     # State and trial logic. It might be good to have these methods do some common sense functions / logging
     def run(self):
 
         for attr in self.req_panel_attr:
-            self.log.debug("Checking that panel has attribute %s" % attr)
+            logger.debug("Checking that panel has attribute %s" % attr)
             assert hasattr(self.panel, attr)
 
-        self.log.debug("Resetting panel")
+        logger.debug("Resetting panel")
         self.panel.reset()
         self.save()
         # self.init_summary()
 
-        self.log.info('%s: running %s with parameters in %s' % (self.name,
-                                                                self.__class__.__name__,
-                                                                self.snapshot_f,
-                                                                )
+        logger.info('%s: running %s with parameters in %s' % (self.name,
+                                                              self.__class__.__name__,
+                                                              self.snapshot_f,
+                                                              )
                       )
         if self.parameters['shape']:
-            self.log.info("Running shaping")
+            logger.info("Running shaping")
             self.shaper.run_shape(self.parameters['shape'])
 
         while True:
-            self.log.debug("Entering state machine")
-            states.run_state_machine(start_in='idle',
+            logger.debug("Entering state machine")
+            states.run_state_machine(self,
+                                     start_in='idle',
                                      error_state='idle',
                                      **self.STATE_DICT)
 
@@ -244,6 +250,12 @@ class BaseExp(object):
     def consequate_post(self):
         pass
 
+    def reward(self):
+        pass
+
+    def punish(self):
+        pass
+
     def trial_post(self):
         pass
 
@@ -275,4 +287,4 @@ class BaseExp(object):
 
     def log_error_callback(self, err):
         if err.__class__ is InterfaceError or err.__class__ is ComponentError:
-            self.log.critical(str(err))
+            logger.critical(str(err))

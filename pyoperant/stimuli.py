@@ -1,9 +1,12 @@
 import fnmatch
 import os
 import wave
+import logging
+import random
 from contextlib import closing
 from pyoperant.utils import Event
 
+logger = logging.getLogger(__name__)
 
 class Stimulus(Event):
     """docstring for Stimulus"""
@@ -22,6 +25,7 @@ class AuditoryStimulus(Stimulus):
     @classmethod
     def from_wav(cls, wavfile):
 
+        logger.debug("Attempting to create stimulus object from %s" % wavfile)
         with closing(wave.open(wavfile,'rb')) as wf:
             (nchannels, sampwidth, framerate, nframes, comptype, compname) = wf.getparams()
 
@@ -50,13 +54,11 @@ class StimulusCondition(object):
                  file_path="", recursive=False, file_pattern="*"):
 
         # These should do something better than printing and returning
-        if file_path is None:
-            print("file_path must be specified!")
-            return
+        if not file_path:
+            raise IOError("No stimulus file_path provided!")
 
         if not os.path.exists(file_path):
-            print("file_path does not exist!")
-            return
+            raise IOError("Stimulus file_path does not exist!")
 
         self.name = name
         self.response = response
@@ -68,6 +70,8 @@ class StimulusCondition(object):
         self.recursive = recursive
         self.file_pattern = file_pattern
         self.filter_files()
+
+        logger.debug("Created new condition: %s" % self)
 
     def __str__(self):
 
@@ -87,6 +91,7 @@ class StimulusCondition(object):
     def get(self, replacement=True):
 
         index = random.choice(range(len(self.files)))
+        logger.debug("Selected file %d of %d" % (index, len(self.files)))
         if replacement:
             return self.files[index]
         else:

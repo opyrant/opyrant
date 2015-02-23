@@ -6,9 +6,7 @@ class Trial(Event):
     def __init__(self,
                  index=None,
                  experiment=None,
-                 block=None,
                  stimulus_condition=None,
-                 subject=None,
                  *args, **kwargs):
 
         super(Trial, self).__init__(*args, **kwargs)
@@ -17,18 +15,15 @@ class Trial(Event):
 
         # Object references
         self.experiment = experiment
-        self.block = block
         self.condition = stimulus_condition
-        self.subject = subject
 
+        # Trial statistics
         self.stimulus = None
         self.response = None
         self.correct = None
         self.rt = None
         self.reward = False
         self.punish = False
-        self.events = []
-        self.stim_event = None
 
     def run(self):
         """
@@ -43,7 +38,7 @@ class Trial(Event):
         self.experiment.this_trial = self
 
         # Get the stimulus
-        self.stimulus = self.stimulus_condition.get()
+        self.stimulus = self.condition.get()
 
         # Any pre-trial logging / computations
         self.experiment.trial_pre()
@@ -67,17 +62,24 @@ class Trial(Event):
         self.experiment.trial_post()
 
         # Store trial data
-        self.subject.store_data()
+        self.experiment.subject.store_data()
 
 
 class Block(Event):
 
-    def __init__(self, index=None, max_trials=None):
+    def __init__(self, index=None, experiment=None, queue=None, queue_parameters=None,
+                 reinforcement=None, conditions=None, weights=None, max_trials=None,
+                 *args, **kwargs):
 
         super(Block, self).__init__(*args, **kwargs)
         self.index = index
+        self.experiment = experiment
+        self.queue = queue
+        self.queue_parameters = queue_parameters
+        self.reinforcement = reinforcement
+        self.conditions = conditions
+        self.weights = weights
         self.max_trials = max_trials
-        self.trials = None
 
     def check_completion(self):
 

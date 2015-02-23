@@ -1,8 +1,12 @@
+import logging
+import ipdb
+from pyoperant import ComponentError, InterfaceError, utils
 
-def log_error_callback(experiment, err):
+logger = logging.getLogger(__name__)
+def log_error_callback(err):
 
-    if isinstance(err, (InstanceError, ComponentError)):
-        experiment.log.critical(repr(err))
+    if isinstance(err, (InterfaceError, ComponentError)):
+        logger.critical(repr(err))
 
 def run_state_machine(experiment, start_in='pre', error_state=None, error_callback=None, **states):
     """runs a state machine defined by the keyword arguments
@@ -33,7 +37,7 @@ def run_state_machine(experiment, start_in='pre', error_state=None, error_callba
     while state_name is not None:
         try:
             with states[state_name](experiment) as state:
-                state.run()
+                state_name = state.run()
         except Exception as e:
             if error_callback:
                 error_callback(e)
@@ -51,15 +55,15 @@ class State(object):
 
     def __enter__(self):
 
-        self.experiment.log("Entering %s state" % self.__name__)
+        logger.info("Entering %s state" % self.__class__.__name__)
 
         return self
 
     def __exit__(self, type_, value, traceback):
 
-        self.experiment.log("Exiting %s state" % self.__name__)
-        if type_ not in (KeyboardInterrupt, SystemInterrupt):
-            log_error_callback(experiment, value)
+        logger.info("Exiting %s state" % self.__class__.__name__)
+        if isinstance(value, Exception):
+            log_error_callback(value)
 
         return False
 
@@ -111,7 +115,9 @@ class Session(State):
 
     def run(self):
 
+        # ipdb.set_trace()
         self.experiment.session_main()
+        return "idle"
 
     def __exit__(self, type_, value, traceback):
 
@@ -126,11 +132,11 @@ class Idle(State):
 
         if self.experiment.check_light_schedule() == False:
             return "sleep"
-        elif self.check_session_schedule():
+        elif self.experiment.check_session_schedule():
             return "session"
         else:
             self.experiment.panel.reset()
-            self.experiment.log.debug("idling...")
+            logger.debug("idling...")
             utils.wait(self.experiment.parameters["idle_poll_interval"])
             return "idle"
 
@@ -139,7 +145,7 @@ class Sleep(State):
 
     def run(self):
 
-        self.experiment.log.debug("sleeping")
+        logger.debug("sleeping")
         self.experiment.panel.sleep()
         utils.wait(self.experiment.parameters["idle_poll_interval"])
         if self.experiment.check_light_schedule() == False:

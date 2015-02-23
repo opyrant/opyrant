@@ -1,12 +1,5 @@
 from numpy import random
 
-SCHEDULE_DICT = dict(continuous=ContinuousReinforcement,
-                     fixed=FixedRatioSchedule,
-                     fixedratio=FixedRatioSchedule,
-                     variable=VariableRatioSchedule,
-                     variableratio=VariableRatioSchedule,
-                     percent=PercentReinforcement)
-
 class BaseSchedule(object):
     """Maintains logic for deciding whether to consequate trials.
 
@@ -146,3 +139,10 @@ class PercentReinforcement(BaseSchedule):
 
     def __unicode__(self):
         return "PR%i" % self.prob
+
+SCHEDULE_DICT = dict(continuous=ContinuousReinforcement,
+                     fixed=FixedRatioSchedule,
+                     fixedratio=FixedRatioSchedule,
+                     variable=VariableRatioSchedule,
+                     variableratio=VariableRatioSchedule,
+                     percent=PercentReinforcement)

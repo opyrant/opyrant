@@ -3,53 +3,46 @@ from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
 
 
+
 class TLabPanel(panels.BasePanel):
 
-    preconfigured = {1: {"arduino": "/dev/tty.usbmodemfa141",
-                         "speaker": "Built-in Output",
-                         "key_input": 4,
-                         "key_light": 8,
-                         "main_light": 9,
-                         "hopper": 10,
-                         },
-                     2: {"arduino": "/dev/tty.usbserial",
-                         "speaker": "sysdefault",
-                         "key_input": 4,
-                         "key_light": 8,
-                         "main_light": 9,
-                         "hopper": 10,
-                         },
+    configuration = {"key_input": 4,
+                     "key_light": 8,
+                     "main_light": 9,
+                     "hopper": 10,
                      }
     baud_rate = 19200
 
-    def __init__(self, id_, *args, **kwargs):
+    def __init__(self, configuration, *args, **kwargs):
 
         super(TLabPanel, self).__init__(self, *args, **kwargs)
 
-        self.id = id_
+        self.configuration = TLabPanel.configuration.copy()
+        self.configuration.update(configuration)
 
         # Initialize interfaces
-        self.interfaces['arduino'] = arduino_.ArduinoInterface(device_name=self.preconfigured[self.id]['arduino'],
+        self.interfaces['arduino'] = arduino_.ArduinoInterface(device_name=self.configuration['arduino'],
                                                                 baud_rate=self.baud_rate)
-        self.interfaces['pyaudio'] = pyaudio_.PyAudioInterface(device_name=self.preconfigured[self.id]['speaker'])
+        self.interfaces['pyaudio'] = pyaudio_.PyAudioInterface(device_name=self.configuration['speaker'])
         # self.interfaces['avconv'] = avconv_.AVConvInterface()
 
         # Create hardware inputs and outputs
         self.inputs.append(hwio.BooleanInput(name="Pecking key input",
                                              interface=self.interfaces['arduino'],
-                                             params={"channel": self.preconfigured[self.id]["key_input"],
-                                                     "pullup": True}))
+                                             params={"channel": self.configuration["key_input"],
+                                                     "pullup": True,
+                                                     "wait": 0.1}))
 
 
         self.outputs.append(hwio.BooleanOutput(name="Pecking key light",
                                                interface=self.interfaces['arduino'],
-                                               params={"channel": self.preconfigured[self.id]["key_light"]}))
+                                               params={"channel": self.configuration["key_light"]}))
         self.outputs.append(hwio.BooleanOutput(name="Main light",
                                                interface=self.interfaces['arduino'],
-                                               params={"channel": self.preconfigured[self.id]["main_light"]}))
+                                               params={"channel": self.configuration["main_light"]}))
         self.outputs.append(hwio.BooleanOutput(name="Hopper",
                                                interface=self.interfaces['arduino'],
-                                               params={"channel": self.preconfigured[self.id]["hopper"]}))
+                                               params={"channel": self.configuration["hopper"]}))
 
 
         # Set up components
@@ -63,10 +56,13 @@ class TLabPanel(panels.BasePanel):
         self.house_light = components.HouseLight(light=self.outputs[1])
         self.hopper = components_tlab.HopperNoIR(solenoid=self.outputs[2])
 
-    def reward(self, duration=10.0):
+        # Translations
+        self.response_port = self.peck_port
+
+    def reward(self, value=10.0):
 
         self.hopper.up()
-        peck_time = self.peck_port.poll(duration)
+        peck_time = self.peck_port.poll(value)
         self.hopper.down()
         if peck_time is not None:
             return peck_time
@@ -113,6 +109,28 @@ class TLabPanel(panels.BasePanel):
         self.peck_port.off()
 
 
+class Thing1(TLabPanel):
 
-PANELS = {"Box1": TLabPanel(id=1),
-          "Box2": TLabPanel(id=2)}
+    configuration = {"arduino": "/dev/ttyACM0",
+                     "speaker": "speaker0"}
+
+    def __init__(self, *args, **kwargs):
+
+        super(Thing1, self).__init__(self.configuration)
+
+
+class Thing2(TLabPanel):
+
+    configuration = {"arduino": "/dev/ttyUSB0",
+                     "speaker": "speaker1"}
+
+    def __init__(self, *args, **kwargs):
+
+        super(Thing2, self).__init__(self.configuration)
+
+
+
+
+
+PANELS = {"Thing1": Thing1,
+          "Thing2": Thing2}

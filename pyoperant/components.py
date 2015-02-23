@@ -37,18 +37,18 @@ class Hopper(BaseComponent):
     ----------
     solenoid : `hwio.BooleanOutput`
         output channel to activate the solenoid & raise the hopper
-    IR : :class:`hwio.BooleanInput` 
+    IR : :class:`hwio.BooleanInput`
        input channel for the IR beam to check if the hopper is up
-    lag : float, optional 
+    lag : float, optional
         time in seconds to wait before checking to make sure the hopper is up (default=0.3)
 
     Attributes
     ----------
-    solenoid : hwio.BooleanOutput 
+    solenoid : hwio.BooleanOutput
         output channel to activate the solenoid & raise the hopper
-    IR : hwio.BooleanInput 
+    IR : hwio.BooleanInput
        input channel for the IR beam to check if the hopper is up
-    lag : float 
+    lag : float
         time in seconds to wait before checking to make sure the hopper is up
 
     """
@@ -139,7 +139,7 @@ class Hopper(BaseComponent):
 
         Parameters
         ---------
-        dur : float, optional 
+        dur : float, optional
             duration of feed in seconds
 
         Returns
@@ -216,7 +216,7 @@ class PeckPort(BaseComponent):
         return self.IR.read()
 
     def off(self):
-        """ Turns the LED off 
+        """ Turns the LED off
 
         Returns
         -------
@@ -227,7 +227,7 @@ class PeckPort(BaseComponent):
         return True
 
     def on(self):
-        """Turns the LED on 
+        """Turns the LED on
 
         Returns
         -------
@@ -270,7 +270,7 @@ class PeckPort(BaseComponent):
         datetime
             Timestamp of the IR beam being broken.
         """
-        return self.IR.poll(timeout)
+        return self.IR.poll(timeout=timeout)
 
 ## House Light ##
 class HouseLight(BaseComponent):
@@ -282,8 +282,8 @@ class HouseLight(BaseComponent):
         output channel to turn the light on and off
 
     Methods:
-    on() -- 
-    off() -- 
+    on() --
+    off() --
     timeout(dur) -- turns off the house light for 'dur' seconds (default=10.0)
     punish() -- calls timeout() for 'value' as 'dur'
 
@@ -319,7 +319,7 @@ class HouseLight(BaseComponent):
         return True
 
     def timeout(self,dur=10.0):
-        """Turn off the light for *dur* seconds 
+        """Turn off the light for *dur* seconds
 
         Keywords
         -------
@@ -432,4 +432,3 @@ class RGBLight(BaseComponent):
 #     """
 #     def __init__(self,*args,**kwargs):
 #         super(Perch, self).__init__(*args,**kwargs)
-
