@@ -20,15 +20,15 @@ class ArduinoInterface(base_.BaseInterface):
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
     TODO: Raise reasonable exceptions.
-    TODO: Might be worth it to add a flushOutput() and flushInput() before writing and reading, respectively
     TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
+    TODO: Attempt to reconnect device if it can't be reached
     """
 
     _default_state = dict(invert=False,
                           held=False,
                           )
 
-    def __init__(self, device_name, baud_rate=9600, inputs=None, outputs=None, *args, **kwargs):
+    def __init__(self, device_name, baud_rate=19200, inputs=None, outputs=None, *args, **kwargs):
 
         super(ArduinoInterface, self).__init__(*args, **kwargs)
 
@@ -54,7 +54,7 @@ class ArduinoInterface(base_.BaseInterface):
         return "Arduino device at %s: %d input channels and %d output channels configured" % (self.device_name, len(self.inputs), len(self.outputs))
 
     def __repr__(self):
-
+        # Add inputs and outputs to this
         return "ArduinoInterface(%s, baud_rate=%d)" % (self.device_name, self.baud_rate)
 
     def open(self):
@@ -126,9 +126,9 @@ class ArduinoInterface(base_.BaseInterface):
         '''
 
         if channel not in self._state:
-            raise InterfaceError("Channel %d is not configured on device %s" % (channel, self))
+            raise InterfaceError("Channel %d is not configured on device %s" % (channel, self.device_name))
 
-        if self.device.inWaiting():
+        if self.device.inWaiting() > 0: # There is currently data in the input buffer
             self.device.flushInput()
         self.device.write(self._make_arg(channel, 0))
         v = ord(self.device.read())
@@ -138,7 +138,8 @@ class ArduinoInterface(base_.BaseInterface):
                 v = 1 - v
             return v == 1
         else:
-            raise InterfaceError('Could not read from serial device "%s", channel %d' % (self.device, channel))
+            logger.error("Device %s returned unexpected value of %d on reading channel %d" % (self, v, channel))
+            # raise InterfaceError('Could not read from serial device "%s", channel %d' % (self.device, channel))
 
     def _poll(self, channel, timeout=None, wait=None, suppress_longpress=True, **kwargs):
         """ runs a loop, querying for pecks. returns peck time or "GoodNite" exception """
@@ -146,14 +147,16 @@ class ArduinoInterface(base_.BaseInterface):
         if timeout is not None:
             start = time.time()
 
-        logger.debug("Polling from device %s" % self)
+        logger.debug("Begin polling from d%s" % self.device_name)
         while True:
             if not self._read_bool(channel):
                 logger.debug("Polling: %s" % False)
+                # Read returned False. If the channel was previously "held" then that flag is removed
                 if self._state[channel]["held"]:
                     self._state[channel]["held"] = False
             else:
                 logger.debug("Polling: %s" % True)
+                # As long as the channel is not currently held, or longpresses are not being supressed, register the press
                 if (not self._state[channel]["held"]) or (not suppress_longpress):
                     break
 
@@ -162,6 +165,7 @@ class ArduinoInterface(base_.BaseInterface):
                     logger.debug("Polling timed out. Returning")
                     return None
 
+            # Wait for a specified amount of time before continuing on with the next loop
             if wait is not None:
                 utils.wait(wait)
 

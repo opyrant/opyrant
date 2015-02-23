@@ -1,3 +1,4 @@
+import datetime as dt
 from pyoperant import hwio, components, panels, utils
 from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
@@ -98,7 +99,17 @@ class TLabPanel(panels.BasePanel):
 
     def calibrate(self):
 
-        pass
+        self.peck_port.off()
+        while True:
+            is_pecked = self.peck_port.status()
+            if is_pecked:
+                current_time = dt.datetime.now()
+                print("%s: Pecked!" % current_time.strftime("%H:%M:%S"))
+                self.peck_port.on()
+            utils.wait(0.05)
+            self.peck_port.off()
+
+
 
     def ready(self):
 
