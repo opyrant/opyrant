@@ -35,8 +35,7 @@ class TLabPanel(panels.BasePanel):
         self.inputs.append(hwio.BooleanInput(name="Pecking key input",
                                              interface=self.interfaces['arduino'],
                                              params={"channel": self.configuration["key_input"],
-                                                     "pullup": True,
-                                                     "wait": 0.1}))
+                                                     "pullup": True}))
 
 
         self.outputs.append(hwio.BooleanOutput(name="Pecking key light",
@@ -175,7 +174,7 @@ class Thing2(TLabPanel):
 
 class Box5(TLabPanel):
 
-    configuration = {"arduino": "/dev/ttyUSB0",
+    configuration = {"arduino": "/dev/ttyACM2",
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
