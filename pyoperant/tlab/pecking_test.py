@@ -16,7 +16,7 @@ class PeckingTest(GoNoGoInterrupt):
 
     def __init__(self, *args, **kwargs):
 
-        kwargs["experiment_path"] = os.path.join(kwargs["experiment_path",
+        kwargs["experiment_path"] = os.path.join(kwargs["experiment_path"],
                                                  kwargs["subject"],
                                                  dt.datetime.now().strftime("%d%m%y"))
 
