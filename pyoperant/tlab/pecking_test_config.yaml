@@ -8,7 +8,7 @@ experimenter:
 
 # Experiment properties
 subject: Test
-panel_name: Thing2
+panel_name: Box6
 light_schedule:
     - !!python/tuple ["05:00", "23:59"]
 idle_poll_interval: 60.0
@@ -19,11 +19,10 @@ session_schedule:
     - !!python/tuple ["05:00", "23:59"]
 shape: false
 
-# Behavior properties
-reward_value: 10.0
+reward_value: 12.0
 
 # File paths
-experiment_path: "/home/tlee/Data/pecking_test"
+experiment_path: "/home/fet/data/Test"
 
 # Block properties
 blocks:
@@ -31,11 +30,11 @@ blocks:
     - conditions:
         # Rewarded stimuli
         rewarded:
-            file_path: "/auto/tdrive/tlee/operant/stimuli/trial_run_day1/reward"
+            file_path: "/home/fet/stimuli/trial_run_shapingCat/reward"
             weight: 0.2
         # Unrewarded stimuli
         unrewarded:
-            file_path: "/auto/tdrive/tlee/operant/stimuli/trial_run_day1/nonreward"
+            file_path: "/home/fet/stimuli/trial_run_shapingCat/nonreward"
             weight: 0.8
       # Reinforcement schedule
       reinforcement: continuous
@@ -54,13 +53,13 @@ log_handlers:
     file:
         filename: ""
         level: !!python/name:logging.DEBUG
-    email:
-        mailhost: localhost
-        toaddrs:
-            - *def_email
-        fromaddr: "Pecking <pecking@fet.berkeley.edu>"
-        subject: "pyoperant notice"
-        credentials: none
-        secure: none
-        level: !!python/name:logging.ERROR
+    # email:
+    #     mailhost: localhost
+    #     toaddrs:
+    #         - *def_email
+    #     fromaddr: "Pecking <pecking@fet.berkeley.edu>"
+    #     subject: "pyoperant notice"
+    #     credentials: none
+    #     secure: none
+    #     level: !!python/name:logging.ERROR
 ...

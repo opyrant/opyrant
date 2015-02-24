@@ -1,4 +1,4 @@
-import logging, traceback
+import logging, traceback, logging.handlers
 import os, sys, socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure

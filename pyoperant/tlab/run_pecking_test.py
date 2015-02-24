@@ -8,7 +8,7 @@ from pyoperant.behavior.go_no_go_interrupt import *
 
 # Load config file
 logging.basicConfig(level=logging.INFO)
-config_file = "/home/tlee/Data/code/pyoperant/pyoperant/tlab/pecking_test_config.yaml"
+config_file = "/home/fet/code/pyoperant/pyoperant/tlab/pecking_test_config.yaml"
 if config_file.lower().endswith(".json"):
     parameters = configure.ConfigureJSON.load(config_file)
 elif config_file.lower().endswith(".yaml"):
