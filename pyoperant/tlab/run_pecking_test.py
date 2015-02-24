@@ -2,6 +2,7 @@
 import os
 import sys
 import logging
+from pyoperant import configure
 from pyoperant.tlab.local_tlab import PANELS
 from pyoperant.tlab.polling_filter import PollingFilter
 from pyoperant.tlab.pecking_test import PeckingTest
