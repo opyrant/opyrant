@@ -5,6 +5,7 @@ import logging
 import csv
 import datetime as dt
 import random
+import numpy as np
 from pyoperant.behavior import base
 from pyoperant.errors import EndSession
 from pyoperant.experiment import states, trials
@@ -106,7 +107,7 @@ class GoNoGoInterrupt(base.BaseExp):
 
         # Create a subject object
         logger.info("Creating subject object for %s" % self.parameters["subject"])
-        self.subject = subjects.Subject(name=self.parameters["subject"], datastore="csv", output_path="/path/to/datastore", experiment=self)
+        self.subject = subjects.Subject(name=self.parameters["subject"], datastore="csv", output_path=self.parameters["experiment_path"], experiment=self)
 
         # Create block designs and stimulus conditions. Could any of this go in base?
         self.block_designs = list()
@@ -229,6 +230,7 @@ class GoNoGoInterrupt(base.BaseExp):
         if self.this_trial.response_time is None:
             self.this_trial.response = 0
             self.start_immediately = False # Next trial will poll for a response before beginning
+            self.this_trial.rt = np.nan
         else:
             self.this_trial.response = 1
             self.start_immediately = True # Next trial will begin immediately

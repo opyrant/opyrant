@@ -53,7 +53,7 @@ class BaseExp(object):
                  log_handlers=None,
                  *args, **kwargs):
 
-        super(BaseExp,  self).__init__()
+        super(BaseExp, self).__init__()
         REQ_PANEL_ATTR = ["sleep", "reset"]
 
         # Initialize experiment parameters received as input
@@ -65,9 +65,15 @@ class BaseExp(object):
         self.parameters['filetime_fmt'] = filetime_fmt
         self.parameters['light_schedule'] = light_schedule
         self.parameters['idle_poll_interval'] = idle_poll_interval
+
         self.parameters['experiment_path'] = experiment_path
+        if not os.path.exists(self.parameters["experiment_path"]):
+            logger.debug("Creating %s" % self.parameters["experiment_path"])
+            os.makedirs(self.parameters["experiment_path"])
+
         if stim_path == '':
-            self.parameters['stim_path'] = os.path.join(experiment_path,'stims')
+            self.parameters['stim_path'] = os.path.join(experiment_path,
+                                                        'stims')
         else:
             self.parameters['stim_path'] = stim_path
         self.parameters['subject'] = subject

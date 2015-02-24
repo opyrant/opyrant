@@ -1,4 +1,3 @@
-
 from pyoperant.utils import Event
 
 class Trial(Event):

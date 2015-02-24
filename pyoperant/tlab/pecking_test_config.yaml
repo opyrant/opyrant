@@ -1,17 +1,55 @@
 ---
-# Experiment description
-name: Go No-Go Interruption
-description: Testing Go No-Go Interruption task
+# You should probably only have to change these values
 experimenter:
     name: Tyler Lee
     email: &def_email "siriuslee305@gmail.com"
 
 # Experiment properties
-subject: Test
-panel_name: Box6
+subject: &subject GraGre4401M
+
+# Stimulus directory
+stim_directory: &stims "/home/fet/stimuli/trial_run_shapingCat"
+
+# Log key data during polling
+log_polling: true
+log_polling_file: "keydata.log"
+
+# These values should probably be left unchanged unless you know what you're doing.
+
+# Experiment description
+name: Go No-Go Interruption
+description: Go No-Go Interruption task
+panel_name: Box5
+
+# Experiment properties
 light_schedule:
     - !!python/tuple ["05:00", "23:59"]
 idle_poll_interval: 60.0
+
+# File paths
+experiment_path: "/home/fet/data/" # This is the root directory and will be appended with subject and date
+
+# Block properties
+blocks:
+    # Block number 1
+    - conditions:
+        # Rewarded stimuli
+        rewarded:
+            file_path: !!python/object/apply:os.path.join [*stims, "reward"]
+            weight: 0.2
+        # Unrewarded stimuli
+        unrewarded:
+            file_path: !!python/object/apply:os.path.join [*stims, "nonreward"]
+            weight: 0.8
+      # Reinforcement schedule
+      reinforcement: continuous
+      # Trial Queue
+      queue: random
+      queue_parameters: {}
+
+# Block Queue
+block_queue: block
+block_queue_parameters: {}
 
 # Session details
 num_sessions: 1
@@ -21,37 +59,12 @@ shape: false
 
 reward_value: 12.0
 
-# File paths
-experiment_path: "/home/fet/data/Test"
-
-# Block properties
-blocks:
-    # Block number 1
-    - conditions:
-        # Rewarded stimuli
-        rewarded:
-            file_path: "/home/fet/stimuli/trial_run_shapingCat/reward"
-            weight: 0.2
-        # Unrewarded stimuli
-        unrewarded:
-            file_path: "/home/fet/stimuli/trial_run_shapingCat/nonreward"
-            weight: 0.8
-      # Reinforcement schedule
-      reinforcement: continuous
-      # Trial Queue
-      queue: random
-      queue_parameters: {}
-      max_trials: 20
-# Block Queue
-block_queue: block
-block_queue_parameters: {}
-
 # Log handler setup
 # Possible values are file, email
 log_handlers:
     # Logging to file
     file:
-        filename: ""
+        filename: "experiment.log"
         level: !!python/name:logging.DEBUG
     # email:
     #     mailhost: localhost
