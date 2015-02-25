@@ -13,11 +13,11 @@ class PollingFilter(logging.Filter):
     def filter(self, record):
 
         if record.msg.startswith("Polling: "):
+            msg_time = time.time()
             if self._last_msg is not None:
-                msg_time = time.time()
                 if msg_time - self._last_msg <= self._min_interval:
                     return False
-                self._last_msg = msg_time
+            self._last_msg = msg_time
             record.msg = record.msg.replace("Polling: ", "")
             return True
 
