@@ -175,7 +175,7 @@ class Thing2(TLabPanel):
 class Box5(TLabPanel):
 
     configuration = {"arduino": "/dev/ttyACM0",
-                     "speaker": "speaker0"}
+                     "speaker": "default"}
 
     def __init__(self, *args, **kwargs):
         super(Box5, self).__init__(self.configuration)
@@ -184,7 +184,7 @@ class Box5(TLabPanel):
 class Box6(TLabPanel):
 
     configuration = {"arduino": "/dev/ttyACM1",
-                     "speaker": "speaker1"}
+                     "speaker": "default"}
 
     def __init__(self, *args, **kwargs):
         super(Box6, self).__init__(self.configuration)
