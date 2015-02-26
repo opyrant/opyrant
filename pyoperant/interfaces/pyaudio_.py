@@ -1,8 +1,10 @@
 import pyaudio
 import wave
+import logging
 from pyoperant.interfaces import base_
 from pyoperant import InterfaceError
 
+logger = logging.getLogger(__name__)
 
 class PyAudioInterface(base_.BaseInterface):
     """Class which holds information about an audio device
@@ -30,6 +32,7 @@ class PyAudioInterface(base_.BaseInterface):
         self.pa = pyaudio.PyAudio()
         for index in range(self.pa.get_device_count()):
             if self.device_name == self.pa.get_device_info_by_index(index)['name']:
+                logger.debug("Found device %s at index %d" % (self.device_name, index))
                 self.device_index = index
                 break
             else:
@@ -44,7 +47,7 @@ class PyAudioInterface(base_.BaseInterface):
             self.stream.close()
         except AttributeError:
             self.stream = None
-        try:    
+        try:
             self.wf.close()
         except AttributeError:
             self.wf = None
@@ -61,7 +64,7 @@ class PyAudioInterface(base_.BaseInterface):
         """
         def _callback(in_data, frame_count, time_info, status):
             try:
-                cont = self.callback()         
+                cont = self.callback()
             except TypeError:
                 cont = True
 
@@ -89,6 +92,9 @@ class PyAudioInterface(base_.BaseInterface):
 
     def _stop_wav(self):
         try:
+            logger.debug("Attempting to close stream")
+            self.stream.stop_stream()
             self.stream.close()
+            logger.debug("Stream closed")
         except AttributeError:
             self.stream = None

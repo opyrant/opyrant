@@ -1,17 +1,36 @@
 ---
+# The main format is as follows:
+# Each section contains information that will help to configure your
+# experiment. Where possible, values that are not supplied will be filled in
+# with default values supplied by the given experiment. The author of a
+# particular behavior script should also write a config file that will serve as
+# a template and possibly be used to provide the default values. If a section
+# requires specification of a python object, the formatting should go something
+# like this:
+# object_name: !!python/object:module.submodule
+#              param1: value1
+#              param2: value2
+#              ...
+#              paramn: valuen
+# You can refer to a previously defined object using "&some_name" before
+# defining the object and "*some_name" when referencing the object
+
 # Experiment description
 name: Go No-Go Interruption
-description: Testing Go No-Go Interruption task
+description: Runs a Go No-Go Interruption task
 experimenter:
-    name: Tyler Lee
-    email: &def_email "siriuslee305@gmail.com"
+    name: First Last
+    email: &def_email "test@somewhere.com"
 
 # Experiment properties
-subject: Test
-panel_name: Thing2
+subject_name: &subect Subject
 light_schedule:
     - !!python/tuple ["05:00", "22:00"]
 idle_poll_interval: 60.0
+debug: false
+
+# Behavior properties
+reward_value: 10.0
 
 # Session details
 num_sessions: 1
@@ -19,46 +38,80 @@ session_schedule:
     - !!python/tuple ["05:00", "22:00"]
 shape: false
 
-# Behavior properties
-reward_value: 10.0
+# Subject properties
+subject: !!python/object:pyoperant.subjects.Subject
+    name: *subject
+    datastore: csv
+    output_path: "/path/to/data/directory"
+
+# Panel properties
+panel: !!python/object:pyoperant.panels.BasePanel {}
 
 # File paths
-experiment_path: "/home/tlee/Data/pecking_test"
+experiment_path: "/path/to/data/directory"
+
+# Stimulus conditions
+conditions:
+    - &rewarded !!python/object:pyoperant.behavior.go_no_go_interrupt.RewardedCondition
+      file_path: "/path/to/rewarded/stimuli"
+    - &unrewarded !!python/object:pyoperant.behavior.go_no_go_interrupt.UnrewardedCondition
+      file_path: "/path/to/unrewarded/stimuli"
+
+# Queues
+queues:
+    - &random !!python/name:pyoperant.queues.random_queue
+    - &block !!python/name:pyoperant.queues.block_queue
+
+# Reinforcement schedules
+reinforcement:
+    - &continuous !!python/object:pyoperant.reinf.ContinuousReinforcement {}
+    - &fixed_ratio !!python/object:pyoperant.reinf.FixedRatioSchedule {}
 
 # Block properties
 blocks:
     # Block number 1
-    - conditions:
-        # Rewarded stimuli
-        rewarded:
-            file_path: "/auto/tdrive/tlee/operant/stimuli/trial_run_day1/reward"
-            weight: 0.2
-        # Unrewarded stimuli
-        unrewarded:
-            file_path: "/auto/tdrive/tlee/operant/stimuli/trial_run_day1/nonreward"
-            weight: 0.8
-      # Reinforcement schedule
-      reinforcement: continuous
-      # Trial Queue
-      queue: random
-      queue_parameters: {}
-      max_trials: 20
-# Block Queue
-block_queue: block
+    - !!python/object:pyoperant.blocks.Block
+        conditions:
+            # Rewarded stimuli
+            - *rewarded
+            # Unrewarded stimuli
+            - *unrewarded
+        weights:
+            - 0.2
+            - 0.8
+        queue: *random
+        queue_parameters: {}
+        reinforcement: *continuous
+
+block_queue: *block
 block_queue_parameters: {}
+block_weights: none
 
 # Log handler setup
-# Possible values are file, email
+# Possible values are stream, file, email
 log_handlers:
-    # Logging to file
+    # stream's only option is level. Overrides "debug" parameter for logging
+    stream:
+        level: !!python/name:logging.INFO
+    # file takes options of
+    # filename: a file under experiment_path
+    # level: a python logging level, written as "!!python/name:logging.LEVEL"
     file:
-        filename: ""
+        filename: "experiment.log"
         level: !!python/name:logging.DEBUG
+    # email takes options of
+    # mailhost: where the email is sent from
+    # toaddrs: a list of addresses to send to
+    # fromaddr: the address to send from
+    # subject: The subject line
+    # credentials: not sure
+    # secure: not sure
+    # level: a python logging level, written as "!!python/name:logging.LEVEL"
     email:
         mailhost: localhost
         toaddrs:
             - *def_email
-        fromaddr: "Pecking <pecking@fet.berkeley.edu>"
+        fromaddr: "Pyoperant <pyoperant@someemail.com"
         subject: "pyoperant notice"
         credentials: none
         secure: none

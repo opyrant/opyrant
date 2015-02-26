@@ -1,6 +1,9 @@
-from pyoperant.utils import Event
+import logging
+from pyoperant import queues, utils
 
-class Trial(Event):
+logger = logging.getLogger(__name__)
+
+class Trial(utils.Event):
     """docstring for Trial"""
     def __init__(self,
                  index=None,
@@ -64,30 +67,22 @@ class Trial(Event):
         self.experiment.subject.store_data()
 
 
-class Block(Event):
+class TrialHandler(queues.BaseHandler):
 
-    def __init__(self, index=None, experiment=None, queue=None, queue_parameters=None,
-                 reinforcement=None, conditions=None, weights=None, max_trials=None,
-                 *args, **kwargs):
+    def __init__(self, block):
 
-        super(Block, self).__init__(*args, **kwargs)
-        self.index = index
-        self.experiment = experiment
-        self.queue = queue
-        self.queue_parameters = queue_parameters
-        self.reinforcement = reinforcement
-        self.conditions = conditions
-        self.weights = weights
-        self.max_trials = max_trials
+        super(TrialHandler, self).__init__(queue=block.queue,
+                                           items=block.conditions,
+                                           weights=block.weights,
+                                           queue_parameters=block.queue_parameters)
+        self.block = block
+        self.trial_index = 0
 
-    def check_completion(self):
+    def __iter__(self):
 
-        if self.end is not None:
-            if utils.check_time((self.start, self.end)): # Will start ever be none? Shouldn't be.
-                return True # Block is complete
-
-        if self.max_trials is not None:
-            if self.num_trials >= self.max_trials:
-                return True
-
-        return False
+        for condition in self.queue:
+            self.trial_index += 1
+            trial = Trial(index=self.trial_index,
+                          experiment=self.block.experiment,
+                          stimulus_condition=condition)
+            yield trial

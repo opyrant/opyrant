@@ -1,11 +1,12 @@
 import datetime as dt
 import os
+import logging
 
 from pyoperant import hwio, components, panels, utils
 from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
 
-
+logger = logging.getLogger(__name__)
 
 class TLabPanel(panels.BasePanel):
 
@@ -134,7 +135,7 @@ class TLabPanel(panels.BasePanel):
 
         return [float(pc) / duration for pc in num_polls]
 
-    def test_audio(self, filename=""):
+    def test_audio(self, filename="", repeat=False):
 
         if not filename:
             filename = self._default_sound_file
@@ -142,7 +143,16 @@ class TLabPanel(panels.BasePanel):
         print("Testing sound playback with %s" % filename)
         self.speaker.queue(filename)
         self.speaker.play()
-        # close file after certain time
+        try:
+            while self.speaker.interface.stream.is_active():
+                utils.wait(0.1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.speaker.stop()
+
+        if repeat:
+            self.test_audio(filename=filename, repeat=repeat)
 
     def ready(self):
 
@@ -160,7 +170,7 @@ class Thing1(TLabPanel):
 
     def __init__(self, *args, **kwargs):
 
-        super(Thing1, self).__init__(self.configuration)
+        super(Thing1, self).__init__(self.configuration, *args, **kwargs)
 
 
 class Thing2(TLabPanel):
@@ -170,7 +180,7 @@ class Thing2(TLabPanel):
 
     def __init__(self, *args, **kwargs):
 
-        super(Thing2, self).__init__(self.configuration)
+        super(Thing2, self).__init__(self.configuration, *args, **kwargs)
 
 class Box5(TLabPanel):
 
@@ -178,7 +188,7 @@ class Box5(TLabPanel):
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
-        super(Box5, self).__init__(self.configuration)
+        super(Box5, self).__init__(self.configuration, *args, **kwargs)
 
 
 class Box6(TLabPanel):
@@ -187,11 +197,12 @@ class Box6(TLabPanel):
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
-        super(Box6, self).__init__(self.configuration)
+        super(Box6, self).__init__(self.configuration, *args, **kwargs)
 
+class Mac(TLabPanel):
 
+    configuration = {"arduino": "/dev/tty.usbserial-A700619q",
+                     "speaker": "Built-in Output"}
 
-PANELS = {"Thing1": Thing1,
-          "Thing2": Thing2,
-          "Box5": Box5,
-          "Box6": Box6}
+    def __init__(self, *args, **kwargs):
+        super(Mac, self).__init__(self.configuration, *args, **kwargs)

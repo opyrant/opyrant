@@ -3,13 +3,9 @@ import os
 import sys
 import logging
 from pyoperant import configure
-from pyoperant.tlab.local_tlab import PANELS
-from pyoperant.tlab.polling_filter import PollingFilter
 from pyoperant.tlab.pecking_test import PeckingTest
 
 box_name = sys.argv[1]
-if box_name not in PANELS:
-    raise Exception("First argument must be the box name (e.g. Box2)")
 
 # Load config file
 config_file = os.path.expanduser(os.path.join("~", "configs", "%s.yaml" % box_name))
@@ -21,9 +17,6 @@ if config_file.lower().endswith(".json"):
 elif config_file.lower().endswith(".yaml"):
     parameters = configure.ConfigureYAML.load(config_file)
 
-# Create panel object
-panel = PANELS[box_name]()
-
 # Create experiment object
-exp = PeckingTest(panel=panel, **parameters)
+exp = PeckingTest(**parameters)
 exp.run()

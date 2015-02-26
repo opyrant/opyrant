@@ -1,6 +1,6 @@
 import logging
 import ipdb
-from pyoperant import ComponentError, InterfaceError, utils
+from pyoperant import EndSession, ComponentError, InterfaceError, utils
 
 logger = logging.getLogger(__name__)
 def log_error_callback(err):
@@ -115,8 +115,11 @@ class Session(State):
 
     def run(self):
 
-        # ipdb.set_trace()
-        self.experiment.session_main()
+        try:
+            self.experiment.session_main()
+        except EndSession:
+            pass
+
         return "idle"
 
     def __exit__(self, type_, value, traceback):

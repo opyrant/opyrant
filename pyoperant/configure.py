@@ -1,5 +1,6 @@
 import os
-
+import ipdb
+from functools import wraps
 
 class Configure(object):
 
@@ -37,7 +38,7 @@ class ConfigureJSON(Configure):
         try:
             import simplejson as json
         except ImportError:
-            import json        
+            import json
 
         if os.path.exists(filename) and (overwrite == False):
             raise IOError("File %s already exists! To overwrite, set overwrite=True" % filename)
@@ -80,3 +81,11 @@ class ConfigureYAML(Configure):
                       indent=4,
                       explicit_start=True,
                       explicit_end=True)
+
+
+class ConfigurableYAML(type):
+
+    def __new__(cls, *args, **kwargs):
+
+        ConfigureYAML.constructors.append(cls)
+        return super(ConfigureableYAML, cls, *args, **kwargs)

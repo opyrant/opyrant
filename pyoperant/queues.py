@@ -2,8 +2,6 @@ import random
 import numpy as np
 import logging
 
-from pyoperant.experiment import trials
-
 logger = logging.getLogger(__name__)
 
 def random_queue(items=None, max_items=100):
@@ -28,7 +26,9 @@ def random_queue(items=None, max_items=100):
         weights = [float(ww) / np.sum(weights) for ww in weights]
 
     ii = 0
-    while ii < max_items:
+    while True:
+        if (max_items is not None) and (ii >= max_items):
+            break
         yield np.random.choice(items, p=weights)
         ii += 1
 
@@ -133,21 +133,10 @@ def staircase_queue(experiment,
 
 class BaseHandler(object):
 
-    QUEUE_MAP = {"random": random_queue,
-                 "block": block_queue,
-                 "staircase": staircase_queue,
-                 }
-
     def __init__(self, queue=random_queue, items=None, weights=None, queue_parameters=None):
 
         if queue_parameters is None:
             queue_parameters = dict()
-
-        if isinstance(queue, str):
-            try:
-                queue = self.QUEUE_MAP[queue]
-            except KeyError:
-                raise KeyError("Unknown queue type %s" % queue)
 
         if queue is random_queue:
             if weights is not None:
@@ -162,43 +151,3 @@ class BaseHandler(object):
 
         for item in self.queue:
             yield item
-
-
-class BlockHandler(BaseHandler):
-
-    def __init__(self, queue=random_queue, blocks=None, weights=None, queue_parameters=None):
-
-        super(BlockHandler, self).__init__(queue=queue,
-                                           items=blocks,
-                                           weights=weights,
-                                           queue_parameters=queue_parameters)
-        self.block_id = 0
-
-    def __iter__(self):
-
-        for block in self.queue:
-            self.block_id += 1
-            block.index = self.block_id
-            yield block
-
-
-class TrialHandler(BaseHandler):
-    # Needs more thought. Where should weights be specified? stimulus_conditions??? D:
-
-    def __init__(self, block):
-
-        super(TrialHandler, self).__init__(queue=block.queue,
-                                           items=block.conditions,
-                                           weights=block.weights,
-                                           queue_parameters=block.queue_parameters)
-        self.block = block
-        self.trial_index = 0
-
-    def __iter__(self):
-
-        for condition in self.queue:
-            self.trial_index += 1
-            trial = trials.Trial(index=self.trial_index,
-                                 experiment=self.block.experiment,
-                                 stimulus_condition=condition)
-            yield trial

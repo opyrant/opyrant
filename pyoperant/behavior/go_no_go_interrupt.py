@@ -8,7 +8,7 @@ import random
 import numpy as np
 from pyoperant.behavior import base
 from pyoperant.errors import EndSession
-from pyoperant.experiment import states, trials
+from pyoperant import states, trials, blocks
 from pyoperant import components, utils, reinf, queues, configure, stimuli, subjects
 
 logger = logging.getLogger(__name__)
@@ -64,23 +64,7 @@ class GoNoGoInterrupt(base.BaseExp):
         path to csv file to save data
     reinf_sched : object
         does logic on reinforcement
-
-
-
     """
-
-
-
-    # Default configuration values until we figure out a way to properly handle
-    # and merge configurations. Currently without a strongly enforced config file
-    # structure, being flexible with these parameters gets very challenging. If
-    # these need to be changed in the meantime, just subclass this class and change
-    # them. I've set them here so that can be done easily.
-    _RewardedCondition = RewardedCondition
-    _UnrewardedCondition = UnrewardedCondition
-    _Reinforcement = reinf.ContinuousReinforcement
-    _trial_queue = queues.random_queue
-    _block_queue = queues.block_queue
 
     def __init__(self, *args, **kwargs):
 
@@ -104,52 +88,7 @@ class GoNoGoInterrupt(base.BaseExp):
                                'reward',  # redundant
                                'max_wait',
                                ]
-
-        # Create a subject object
-        logger.info("Creating subject object for %s" % self.parameters["subject"])
-        self.subject = subjects.Subject(name=self.parameters["subject"], datastore="csv", output_path=self.parameters["experiment_path"], experiment=self)
-
-        # Create block designs and stimulus conditions. Could any of this go in base?
-        self.block_designs = list()
-        # This gets incredibly complicated without requiring some level of consistency in the logs
-        # Do that, please. Some of this could be done in the block initialization.
-        if "blocks" in self.parameters:
-            for block_params in self.parameters["blocks"]:
-                block_design = trials.Block()
-                block_design.experiment = self
-                block_design.max_trials = block_params.get("max_trials", None)
-                block_design.queue = block_params.get("queue", self._trial_queue)
-                block_design.queue_parameters = block_params.get("queue_parameters", {})
-                if "reinforcement" in block_params:
-                    block_design.reinforcement = block_params["reinforcement"]
-                elif "reinforcement" in self.parameters:
-                    block_design.reinforcement = self.parameters["reinforcement"]
-                else:
-                    block_design.reinforcement = self._Reinforcement()
-
-                if isinstance(block_design.reinforcement, str):
-                    try:
-                        block_design.reinforcement = reinf.SCHEDULE_DICT[block_design.reinforcement]()
-                    except KeyError:
-                        raise KeyError("Unknown value for reinforcement: %s. Known values are: %s" % (block_design.reinforcement, ", ".join(reinf.SCHEDULE_DICT.keys())))
-
-                if "conditions" in block_params:
-                    weights = list()
-                    condition_params = block_params["conditions"]["rewarded"]
-                    file_path = condition_params.get("file_path", os.path.join(self.parameters["stim_path"], "reward"))
-                    weights.append(condition_params.get("weight", 0.5))
-                    rewarded_stimuli = RewardedCondition(file_path=file_path)
-
-                    condition_params = block_params["conditions"]["unrewarded"]
-                    file_path = condition_params.get("file_path", os.path.join(self.parameters["stim_path"], "reward"))
-                    weights.append(condition_params.get("weight", 0.5))
-                    unrewarded_stimuli = UnrewardedCondition(file_path=file_path)
-
-                    block_design.conditions = [rewarded_stimuli, unrewarded_stimuli]
-                    block_design.weights = weights
-
-                self.block_designs.append(block_design)
-
+        self.subject.create_datastore()
         self.session_id = 0
 
     def shape(self):
@@ -171,16 +110,18 @@ class GoNoGoInterrupt(base.BaseExp):
         """ Runs the sessions
         """
 
-        # What we want!
-        # How to handle configuration?? Currently this is predefined
-        queue = self.parameters.get("block_queue", self._block_queue)
-        queue_parameters = self.parameters.get("block_queue_parameters", dict())
-        self.blocks = queues.BlockHandler(queue=queue, blocks=self.block_designs, queue_parameters=queue_parameters)
-        for self.this_block in self.blocks:
+        queue = self.parameters["block_queue"]
+        queue_parameters = self.parameters["block_queue_parameters"]
+        weights = self.parameters["block_weights"]
+        self.blocks = blocks.BlockHandler(queue=queue, blocks=self.blocks, queue_parameters=queue_parameters)
+        for self.this_block in blocks.BlockHandler(blocks=self.blocks,
+                                                   weights=weights,
+                                                   queue=queue,
+                                                   queue_parameters=queue_parameters):
             logger.info("Beginning block #%d" % self.this_block.index)
             self.panel.ready()
             self.start_immediately = False
-            for trial in queues.TrialHandler(self.this_block):
+            for trial in trials.TrialHandler(self.this_block):
                 trial.run()
 
     def trial_pre(self):
@@ -282,18 +223,13 @@ class GoNoGoInterrupt(base.BaseExp):
 
 if __name__ == "__main__":
 
-    from pyoperant.tlab.local_tlab import PANELS
     # Load config file
-    logging.basicConfig(level=logging.INFO)
-    config_file = "/home/tlee/Data/code/pyoperant/pyoperant/tlab/go_no_go_interrupt_config.yaml"
+    config_file = "/path/to/config"
     if config_file.lower().endswith(".json"):
         parameters = configure.ConfigureJSON.load(config_file)
     elif config_file.lower().endswith(".yaml"):
         parameters = configure.ConfigureYAML.load(config_file)
 
-    # Create panel object
-    panel = PANELS[parameters["panel_name"]]()
-
     # Create experiment object
-    exp = GoNoGoInterrupt(panel=panel, **parameters)
+    exp = GoNoGoInterrupt(**parameters)
     exp.run()

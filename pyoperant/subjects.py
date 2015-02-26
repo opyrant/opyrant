@@ -1,8 +1,8 @@
 import os
 import csv
 import logging
-
 logger = logging.getLogger(__name__)
+
 
 class Subject(object):
 
@@ -13,20 +13,38 @@ class Subject(object):
         logger.debug("Creating subject object for %s" % name)
         self.name = name
         self.experiment = experiment
+        self.datastore = datastore
         self.output_path = output_path
+        self.filename = filename
 
-        # The output file where data should be written
-        if not filename:
-            filename = "%s_trialdata_%s.%s" % (self.name, self.experiment.timestamp, datastore)
+        self.data = list()
+        logger.info("Created subject object with name %s" % self.datastore)
 
-        self.filename = os.path.join(self.experiment.parameters["experiment_path"], filename)
-        if datastore == "csv":
+    def create_datastore(self):
+
+        if not self.filename:
+            self.filename = "%s_trialdata_%s.%s" % (self.name, self.experiment.timestamp, self.datastore)
+        self.filename = os.path.join(self.experiment.parameters["experiment_path"], self.filename)
+        if self.datastore == "csv":
             self.datastore = CSVStore(self.experiment.fields_to_save, self.filename)
-        logger.info("Created subject object with datastore %s" % self.datastore)
+        logger.info("Created datastore %s for subject %s" % (self.datastore, self.name))
 
-    def store_data(self):
+    def store_data(self, trial=None):
 
-        return self.datastore.store(self.experiment.this_trial)
+        if trial is None:
+            trial = self.experiment.this_trial
+
+        trial_dict = {}
+        for field in self.experiment.fields_to_save:
+            try:
+                trial_dict[field] = getattr(trial,field)
+            except AttributeError:
+                trial_dict[field] = trial.annotations[field]
+            except KeyError:
+                trial_dict[field] = None
+
+        logger.debug("Storing data for trial %d" % trial.index)
+        return self.datastore.store(trial_dict)
 
 class CSVStore(object):
 
@@ -43,21 +61,11 @@ class CSVStore(object):
 
         return "CSVStore: filename = %s, fields = %s" % (self.filename, ", ".join(self.fields_to_save))
 
-    def store(self, trial):
-        '''write trial results to CSV'''
+    def store(self, data):
+        '''write data results to CSV'''
 
-        trial_dict = {}
-        for field in self.fields_to_save:
-            try:
-                trial_dict[field] = getattr(trial,field)
-            except AttributeError:
-                trial_dict[field] = trial.annotations[field]
-            except KeyError:
-                trial_dict[field] = None
-
-        logger.debug("Storing data for trial %d" % trial.index)
         with open(self.filename,'ab') as data_fh:
             trialWriter = csv.DictWriter(data_fh, fieldnames=self.fields_to_save, extrasaction='ignore')
-            trialWriter.writerow(trial_dict)
+            trialWriter.writerow(data)
 
         return True

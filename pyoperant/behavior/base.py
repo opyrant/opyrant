@@ -3,7 +3,7 @@ import os, sys, socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure
 from pyoperant import ComponentError, InterfaceError
-from pyoperant.experiment import states, trials
+from pyoperant import states, trials, subjects
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +17,19 @@ class BaseExp(object):
     Keyword arguments:
     name -- name of this experiment
     desc -- long description of this experiment
-    debug -- (bool) flag for debugging (default=False)
+    debug -- (bool) flag for debugging, switches the logging stream handler
+        between debug and info levels (default=False)
     light_schedule  -- the light schedule for the experiment. either 'sun' or
         a tuple of (starttime,endtime) tuples in (hhmm,hhmm) form defining
         time intervals for the lights to be on
     experiment_path -- path to the experiment
     stim_path -- path to stimuli (default = <experiment_path>/stims)
-    subject -- identifier of the subject
+    subject -- an instance of a Subject() object
     panel -- instance of local Panel() object
+    log_handlers -- A list of dictionaries for configuring log handlers. Currently
+        supported handler types are file and email (in addition to the default stream
+        handler)
+    blocks -- A list of Block() objects
 
     Methods:
     run() -- runs the experiment
@@ -37,21 +42,11 @@ class BaseExp(object):
                       sleep=states.Sleep,
                       session=states.Session)
 
-
-
-    def __init__(self,
-                 name='',
-                 description='',
-                 debug=False,
-                 filetime_fmt='%Y%m%d%H%M%S',
-                 light_schedule='sun',
-                 idle_poll_interval = 60.0,
-                 experiment_path='',
-                 stim_path='',
-                 subject='',
-                 panel=None,
-                 log_handlers=None,
-                 *args, **kwargs):
+    def __init__(self, name='', description='', debug=False,
+                 filetime_fmt='%Y%m%d%H%M%S', light_schedule='sun',
+                 idle_poll_interval = 60.0, experiment_path='',
+                 stim_path='', subject=None, panel=None, log_handlers=None,
+                 blocks=None, *args, **kwargs):
 
         super(BaseExp, self).__init__()
         REQ_PANEL_ATTR = ["sleep", "reset"]
@@ -61,6 +56,7 @@ class BaseExp(object):
         self.description = description
         self.debug = debug
         self.timestamp = dt.datetime.now().strftime(filetime_fmt)
+
         self.parameters = kwargs
         self.parameters['filetime_fmt'] = filetime_fmt
         self.parameters['light_schedule'] = light_schedule
@@ -76,21 +72,33 @@ class BaseExp(object):
                                                         'stims')
         else:
             self.parameters['stim_path'] = stim_path
-        self.parameters['subject'] = subject
+        self.parameters['subject'] = subject.name
 
         # configure logging
         if not log_handlers:
             log_handlers = dict()
         self.parameters['log_handlers'] = log_handlers
         self.log_config()
-        self.add_file_handler()
+        # Should a file log be mandatory and set up by default? If so, bring it
+        # out of the for loop
         for handler_config in log_handlers.keys():
-            if handler_config == "email":
+            if handler_config == "file":
+                self.add_file_handler()
+            elif handler_config == "email":
                 self.add_email_handler()
 
         self.panel = panel
         self.req_panel_attr = REQ_PANEL_ATTR # Copy the list
-        logger.info('panel %s initialized' % self.parameters['panel_name'])
+        logger.info('panel %s initialized' % self.panel.__class__.__name__)
+
+        logger.info("Preparing block objects")
+        self.blocks = blocks
+        for blk in self.blocks:
+            blk.experiment = self
+
+        logger.info("Preparing subject object")
+        self.subject = subject
+        self.subject.experiment = self
         #
         # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
         #     self.parameters['shape'] = None
@@ -108,14 +116,23 @@ class BaseExp(object):
     # Logging configure methods
     def log_config(self):
 
-        if self.debug:
+        if "stream" in self.parameters["log_handlers"]:
+            self.log_level = self.parameters["log_handlers"]["stream"].get("level", logging.INFO)
+        elif self.debug:
             self.log_level = logging.DEBUG
         else:
             self.log_level = logging.INFO
+
         sys.excepthook = _log_except_hook # send uncaught exceptions to log file
 
         logging.basicConfig(level=self.log_level,
                             format='"%(asctime)s","%(levelname)s","%(message)s"')
+
+        # Make sure that the stream handler has the requested log level.
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                handler.setLevel(self.log_level)
 
     def add_file_handler(self):
         """ Add a file handler to the root logger using either default
@@ -131,8 +148,11 @@ class BaseExp(object):
         file_handler = logging.FileHandler(self.log_file)
         level = props.get("level", self.log_level)
         file_handler.setLevel(level)
-        logger = logging.getLogger()
-        logger.addHandler(file_handler)
+        root_logger = logging.getLogger()
+        # Make sure the root logger's level is not too high
+        if root_logger.level > level:
+            root_logger.setLevel(level)
+        root_logger.addHandler(file_handler)
         logger.debug("File handler added to %s with level %d" % (self.log_file, level))
 
     def add_email_handler(self):
@@ -147,8 +167,11 @@ class BaseExp(object):
         heading = '%s\n' % (self.parameters['subject'])
         formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
         email_handler.setFormatter(formatter)
-        logger = logging.getLogger()
-        logger.addHandler(email_handler)
+        root_logger = logging.getLogger()
+        # Make sure the root logger's level is not too high
+        if root_logger.level > level:
+            root_logger.setLevel(level)
+        root_logger.addHandler(email_handler)
         logger.debug("Email handler added to %s with level %d" % (",".join(email_handler.toaddrs), level))
 
     # Scheduling methods
