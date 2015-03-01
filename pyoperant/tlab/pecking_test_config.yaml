@@ -5,10 +5,10 @@ experimenter:
     email: &def_email "siriuslee305@gmail.com"
 
 # Experiment properties
-subject_name: &subject GraGre4401M
+subject_name: &subject TestSubject
 
 # Stimulus directory
-stim_directory: &stims "/auto/tdrive/tlee/operant/stimuli/trial_run_day1"
+stim_directory: &stims "/Users/tylerlee/testing/stimuli"
 
 # Log key data during polling
 log_polling: true

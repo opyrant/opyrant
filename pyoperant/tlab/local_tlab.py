@@ -143,13 +143,15 @@ class TLabPanel(panels.BasePanel):
         print("Testing sound playback with %s" % filename)
         self.speaker.queue(filename)
         self.speaker.play()
-        try:
-            while self.speaker.interface.stream.is_active():
-                utils.wait(0.1)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            self.speaker.stop()
+        utils.wait(0.3 * random.random())
+        self.speaker.stop()
+        # try:
+        #     while self.speaker.interface.stream.is_active():
+        #         utils.wait(0.1)
+        # except KeyboardInterrupt:
+        #     return
+        # finally:
+        #     self.speaker.stop()
 
         if repeat:
             self.test_audio(filename=filename, repeat=repeat)

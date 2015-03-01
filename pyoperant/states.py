@@ -118,7 +118,9 @@ class Session(State):
         try:
             self.experiment.session_main()
         except EndSession:
-            pass
+            logger.info("Session has ended")
+        except KeyboardInterrupt:
+            logger.info("Finishing session and moving to idle")
 
         return "idle"
 
@@ -133,15 +135,21 @@ class Idle(State):
 
     def run(self):
 
-        if self.experiment.check_light_schedule() == False:
-            return "sleep"
-        elif self.experiment.check_session_schedule():
-            return "session"
-        else:
-            self.experiment.panel.reset()
-            logger.debug("idling...")
-            utils.wait(self.experiment.parameters["idle_poll_interval"])
-            return "idle"
+        try:
+            if self.experiment.check_light_schedule() == False:
+                return "sleep"
+            elif self.experiment.check_session_schedule():
+                return "session"
+            else:
+                if hasattr(self.experiment.panel, "idle"):
+                    self.experiment.panel.idle()
+                else:
+                    self.experiment.panel.reset()
+                logger.debug("idling...")
+                utils.wait(self.experiment.parameters["idle_poll_interval"])
+                return "idle"
+        except KeyboardInterrupt:
+            logger.info("Exiting experiment")
 
 
 class Sleep(State):

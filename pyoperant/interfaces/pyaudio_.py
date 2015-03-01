@@ -93,7 +93,13 @@ class PyAudioInterface(base_.BaseInterface):
     def _stop_wav(self):
         try:
             logger.debug("Attempting to close stream")
-            self.stream.stop_stream()
+            logger.debug("There are currently %d open streams" % len(self.pa._streams))
+            logger.debug("Stream activity: %s, %s" % (self.stream.is_active(), self.stream.is_stopped()))
+            # self.stream.stop_stream()
+            # logger.debug("Stream stopped")
+            # while self.stream.is_active():
+            #     logger.debug("Stream is still active!")
+            #     pass
             self.stream.close()
             logger.debug("Stream closed")
         except AttributeError:

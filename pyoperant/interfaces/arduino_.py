@@ -147,7 +147,7 @@ class ArduinoInterface(base_.BaseInterface):
         if timeout is not None:
             start = time.time()
 
-        logger.debug("Begin polling from d%s" % self.device_name)
+        logger.debug("Begin polling from device %s" % self.device_name)
         while True:
             if not self._read_bool(channel):
                 logger.debug("Polling: %s" % False)
