@@ -105,6 +105,8 @@ class GoNoGoInterrupt(base.BaseExp):
         logger.debug("Beginning session")
         self.session_id += 1
         self.session_start_time = dt.datetime.now()
+        self.start_immediately = False
+        self.panel.ready()
 
     def session_main(self):
         """ Runs the sessions
@@ -113,14 +115,11 @@ class GoNoGoInterrupt(base.BaseExp):
         queue = self.parameters["block_queue"]
         queue_parameters = self.parameters["block_queue_parameters"]
         weights = self.parameters["block_weights"]
-        self.blocks = blocks.BlockHandler(queue=queue, blocks=self.blocks, queue_parameters=queue_parameters)
         for self.this_block in blocks.BlockHandler(blocks=self.blocks,
                                                    weights=weights,
                                                    queue=queue,
                                                    queue_parameters=queue_parameters):
             logger.info("Beginning block #%d" % self.this_block.index)
-            self.panel.ready()
-            self.start_immediately = False
             for trial in trials.TrialHandler(self.this_block):
                 trial.run()
 
@@ -213,6 +212,7 @@ class GoNoGoInterrupt(base.BaseExp):
         """ Closes out the sessions
         """
 
+        self.panel.idle()
         self.session_end_time = dt.datetime.now()
         logger.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
         if self.session_id < self.parameters.get("num_sessions", 1):

@@ -147,7 +147,9 @@ class BaseExp(object):
 
         file_handler = logging.FileHandler(self.log_file)
         level = props.get("level", self.log_level)
+        formatter = props.get("format", '"%(asctime)s","%(levelname)s","%(message)s"')
         file_handler.setLevel(level)
+        file_handler.setFormatter(logging.Formatter(formatter))
         root_logger = logging.getLogger()
         # Make sure the root logger's level is not too high
         if root_logger.level > level:

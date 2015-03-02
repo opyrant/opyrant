@@ -150,6 +150,7 @@ class Idle(State):
                 return "idle"
         except KeyboardInterrupt:
             logger.info("Exiting experiment")
+            raise
 
 
 class Sleep(State):
