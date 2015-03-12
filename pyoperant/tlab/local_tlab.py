@@ -141,20 +141,20 @@ class TLabPanel(panels.BasePanel):
             filename = self._default_sound_file
 
         print("Testing sound playback with %s" % filename)
-        self.speaker.queue(filename)
-        self.speaker.play()
-        utils.wait(0.3 * random.random())
-        self.speaker.stop()
-        # try:
-        #     while self.speaker.interface.stream.is_active():
-        #         utils.wait(0.1)
-        # except KeyboardInterrupt:
-        #     return
-        # finally:
-        #     self.speaker.stop()
+        while True:
+            self.speaker.queue(filename)
+            self.speaker.play()
 
-        if repeat:
-            self.test_audio(filename=filename, repeat=repeat)
+            try:
+                while self.speaker.interface.stream.is_active():
+                    utils.wait(0.1)
+            except KeyboardInterrupt:
+                return
+            finally:
+                self.speaker.stop()
+
+            if not repeat:
+                break
 
     def ready(self):
 
@@ -208,7 +208,7 @@ class Box2(TLabPanel):
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
-        super(Box6, self).__init__(self.configuration, *args, **kwargs)
+        super(Box2, self).__init__(self.configuration, *args, **kwargs)
 
 
 class Box3(TLabPanel):
@@ -217,7 +217,7 @@ class Box3(TLabPanel):
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
-        super(Box6, self).__init__(self.configuration, *args, **kwargs)
+        super(Box3, self).__init__(self.configuration, *args, **kwargs)
 
 
 class Mac(TLabPanel):
