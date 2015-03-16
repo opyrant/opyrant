@@ -29,7 +29,16 @@ class TLabPanel(panels.BasePanel):
         # Initialize interfaces
         self.interfaces['arduino'] = arduino_.ArduinoInterface(device_name=self.configuration['arduino'],
                                                                 baud_rate=self.baud_rate)
-        self.interfaces['pyaudio'] = pyaudio_.PyAudioInterface(device_name=self.configuration['speaker'])
+        for ii in xrange(60):
+            try:
+                self.interfaces['pyaudio'] = pyaudio_.PyAudioInterface(device_name=self.configuration['speaker'])
+                break
+            except InterfaceError:
+                if ii == 59:
+                    raise
+                else:
+                    utils.wait(1.0)
+
         # self.interfaces['avconv'] = avconv_.AVConvInterface()
 
         # Create hardware inputs and outputs
@@ -186,7 +195,7 @@ class Thing2(TLabPanel):
 
 class Box5(TLabPanel):
 
-    configuration = {"arduino": "/dev/ttyACM1",
+    configuration = {"arduino": "/dev/ttyACM0",
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
@@ -195,7 +204,7 @@ class Box5(TLabPanel):
 
 class Box6(TLabPanel):
 
-    configuration = {"arduino": "/dev/ttyACM0",
+    configuration = {"arduino": "/dev/ttyACM1",
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
@@ -205,7 +214,7 @@ class Box6(TLabPanel):
 class Box2(TLabPanel):
 
     configuration = {"arduino": "/dev/ttyACM0",
-                     "speaker": "speaker0"}
+                     "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
         super(Box2, self).__init__(self.configuration, *args, **kwargs)
@@ -214,7 +223,7 @@ class Box2(TLabPanel):
 class Box3(TLabPanel):
 
     configuration = {"arduino": "/dev/ttyACM1",
-                     "speaker": "speaker1"}
+                     "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
         super(Box3, self).__init__(self.configuration, *args, **kwargs)
