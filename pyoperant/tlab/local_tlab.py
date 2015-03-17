@@ -2,7 +2,7 @@ import datetime as dt
 import os
 import logging
 
-from pyoperant import hwio, components, panels, utils
+from pyoperant import hwio, components, panels, utils, InterfaceError
 from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
 
@@ -194,8 +194,8 @@ class Thing2(TLabPanel):
         super(Thing2, self).__init__(self.configuration, *args, **kwargs)
 
 class Box5(TLabPanel):
-
-    configuration = {"arduino": "/dev/ttyACM0",
+    # /dev/ttyACM0
+    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_9523234373335140A011-if00",
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
@@ -203,8 +203,8 @@ class Box5(TLabPanel):
 
 
 class Box6(TLabPanel):
-
-    configuration = {"arduino": "/dev/ttyACM1",
+    # /dev/ttyACM1
+    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_952323437333518041A1-if00",
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
@@ -212,8 +212,8 @@ class Box6(TLabPanel):
 
 
 class Box2(TLabPanel):
-
-    configuration = {"arduino": "/dev/ttyACM0",
+    #/dev/ttyACM0
+    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_95232343733351909201-if00",
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
@@ -222,7 +222,7 @@ class Box2(TLabPanel):
 
 class Box3(TLabPanel):
 
-    configuration = {"arduino": "/dev/ttyACM1",
+    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_95232343733351403182-if00",
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
