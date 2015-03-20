@@ -6,9 +6,10 @@ from pyoperant import configure
 from pyoperant.tlab.pecking_test import PeckingTest
 
 box_name = sys.argv[1]
+config_dir = os.path.expanduser(os.path.join("~", "Dropbox", "pecking_test", "configs"))
 
 # Load config file
-config_file = os.path.expanduser(os.path.join("~", "configs", "%s.yaml" % box_name))
+config_file = os.path.join(config_dir, "%s.yaml" % box_name)
 if not os.path.exists(config_file):
     raise IOError("Config file does not exist: %s" % config_file)
 
