@@ -195,7 +195,7 @@ class Thing2(TLabPanel):
 
 class Box5(TLabPanel):
     # /dev/ttyACM0
-    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_9523234373335140A011-if00",
+    configuration = {"arduino": "/dev/ttyArduino_box5",
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
@@ -204,7 +204,7 @@ class Box5(TLabPanel):
 
 class Box6(TLabPanel):
     # /dev/ttyACM1
-    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_952323437333518041A1-if00",
+    configuration = {"arduino": "/dev/ttyArduino_box6",
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
@@ -213,7 +213,7 @@ class Box6(TLabPanel):
 
 class Box2(TLabPanel):
     #/dev/ttyACM0
-    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_95232343733351909201-if00",
+    configuration = {"arduino": "/dev/ttyArduino_box2",
                      "speaker": "speaker1"}
 
     def __init__(self, *args, **kwargs):
@@ -222,7 +222,7 @@ class Box2(TLabPanel):
 
 class Box3(TLabPanel):
 
-    configuration = {"arduino": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_95232343733351403182-if00",
+    configuration = {"arduino": "/dev/ttyArduino_box3",
                      "speaker": "speaker0"}
 
     def __init__(self, *args, **kwargs):
