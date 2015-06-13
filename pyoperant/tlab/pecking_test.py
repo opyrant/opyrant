@@ -15,10 +15,6 @@ class PeckingTest(GoNoGoInterrupt):
 
     def __init__(self, *args, **kwargs):
 
-        kwargs["experiment_path"] = os.path.join(kwargs["experiment_path"],
-                                                 kwargs["subject"].name,
-                                                 dt.datetime.now().strftime("%d%m%y"))
-
         super(PeckingTest, self).__init__(*args, **kwargs)
 
         if self.parameters.get("log_polling", False):
