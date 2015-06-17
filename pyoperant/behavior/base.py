@@ -2,7 +2,7 @@ import logging, traceback, logging.handlers
 import os, sys, socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure
-from pyoperant import ComponentError, InterfaceError
+from pyoperant import ComponentError, InterfaceError, EndExperiment
 from pyoperant import states, trials, subjects
 
 logger = logging.getLogger(__name__)
@@ -212,6 +212,12 @@ class BaseExp(object):
         self.parameters.setdefault("session_schedule", []).append(schedule)
         logger.info("Scheduled next session for %s" % " to ".join(schedule))
 
+    def end(self):
+
+        self.panel.sleep()
+        raise EndExperiment
+
+
     # State and trial logic. It might be good to have these methods do some common sense functions / logging
     def run(self):
 
@@ -233,12 +239,11 @@ class BaseExp(object):
             logger.info("Running shaping")
             self.shaper.run_shape(self.parameters['shape'])
 
-        while True:
-            logger.debug("Entering state machine")
-            states.run_state_machine(self,
-                                     start_in='idle',
-                                     error_state='idle',
-                                     **self.STATE_DICT)
+        logger.debug("Entering state machine")
+        states.run_state_machine(self,
+                                 start_in='idle',
+                                 error_state='idle',
+                                 **self.STATE_DICT)
 
     # session
     def session_pre(self):

@@ -219,6 +219,7 @@ class GoNoGoInterrupt(base.BaseExp):
             self.schedule_next_session()
         else:
             logger.info("Finished all sessions.")
+            self.end()
 
 
 if __name__ == "__main__":

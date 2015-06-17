@@ -1,5 +1,6 @@
 import logging
 import ipdb
+import numpy as np
 from pyoperant import EndSession, ComponentError, InterfaceError, utils
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ def run_state_machine(experiment, start_in='pre', error_state=None, error_callba
         try:
             with states[state_name](experiment) as state:
                 state_name = state.run()
+        except EndExperiment:
+            state_name = None
         except Exception as e:
             if error_callback:
                 error_callback(e)
@@ -120,7 +123,8 @@ class Session(State):
         except EndSession:
             logger.info("Session has ended")
         except KeyboardInterrupt:
-            logger.info("Finishing session and moving to idle")
+            logger.info("Finishing experiment")
+            self.experiment.end()
 
         return "idle"
 
@@ -169,3 +173,97 @@ class Sleep(State):
 
         self.experiment.panel.wake()
         return super(Sleep, self).__exit__(type_, value, traceback)
+
+
+class BaseScheduler(object):
+
+    def __init__(self):
+
+        pass
+
+    def start(self):
+
+        pass
+
+    def stop(self):
+
+        pass
+
+    def trigger_start(self):
+
+        return False
+
+    def trigger_stop(self):
+
+        return False
+
+
+class ResponseScheduler(BaseScheduler):
+
+    def __init__(self, num_responses=np.inf, num_rewarded=np.inf):
+
+        self.num_responses = num_responses
+        self.num_rewarded = num_rewarded
+
+        self.responses = None
+        self.rewarded = None
+
+    def start(self):
+
+        self.responses = 0
+        self.rewarded = 0
+
+    def trigger_stop(self):
+
+        if (self.responses >= self.num_responses) or (self.rewarded >= self.num_rewarded):
+
+            return True
+
+        else:
+            self.responses += 1
+            self.rewarded += 1
+
+            return False
+
+
+class TimeScheduler(BaseScheduler):
+
+    def __init__(self, duration=np.inf, interval=np.inf):
+
+        self.duration = duration
+        self.interval = interval
+
+        self.start_time = None
+        self.stop_time = None
+
+    def start(self):
+
+        self.start_time = dt.datetime.now()
+
+    def trigger_start(self):
+
+        current_time = dt.datetime.now()
+        if current_time - self.stop_time >= interval:
+            return True
+        else:
+            return False
+
+    def stop(self):
+
+        self.stop_time = dt.datetime.now()
+
+    def trigger_stop(self):
+
+        current_time = dt.datetime.now()
+        if current_time - self.start_time >= duration:
+            return True
+        else:
+            return False
+
+
+
+
+
+
+
+
