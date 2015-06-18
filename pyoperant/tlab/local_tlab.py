@@ -93,6 +93,13 @@ class TLabPanel(panels.BasePanel):
         self.house_light.on()
         self.feeder.down()
 
+    def sleep(self):
+        for output in self.outputs:
+            output.write(False)
+        self.house_light.off()
+        self.feeder.down()
+
+
     def test(self):
         self.reset()
 

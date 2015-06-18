@@ -1,7 +1,7 @@
 import logging
 import ipdb
 import numpy as np
-from pyoperant import EndSession, ComponentError, InterfaceError, utils
+from pyoperant import EndSession, EndExperiment, ComponentError, InterfaceError, utils
 
 logger = logging.getLogger(__name__)
 def log_error_callback(err):
@@ -259,11 +259,3 @@ class TimeScheduler(BaseScheduler):
             return True
         else:
             return False
-
-
-
-
-
-
-
-
