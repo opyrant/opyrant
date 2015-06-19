@@ -3,10 +3,21 @@ import os
 import logging
 import datetime as dt
 from pyoperant import configure
-from pyoperant.tlab.polling_filter import PollingFilter
+from pyoperant import stimuli
+from pyoperant.tlab.polling_filter import PollingFilter, AudioPlaybackFilter
 from pyoperant.behavior.go_no_go_interrupt import GoNoGoInterrupt
 
 logger = logging.getLogger(__name__)
+
+class ProbeCondition(stimuli.NonrandomStimulusConditionWav):
+
+    def __init__(self, file_path="", recursive=False):
+
+        super(ProbeCondition, self).__init__(name="Probe",
+                                             response=False,
+                                             is_rewarded=False,
+                                             file_path=file_path,
+                                             recursive=recursive)
 
 class PeckingTest(GoNoGoInterrupt):
     # Additional configurations:
@@ -19,6 +30,8 @@ class PeckingTest(GoNoGoInterrupt):
 
         if self.parameters.get("log_polling", False):
             self.config_polling_log()
+        if self.parameters.get("log_playback", False):
+            self.config_playback_log()
 
     def config_polling_log(self):
 
@@ -38,6 +51,30 @@ class PeckingTest(GoNoGoInterrupt):
         logger = logging.getLogger("pyoperant.interfaces.arduino_")
         logger.setLevel(logging.DEBUG)
         logger.addHandler(polling_handler)
+
+        logger = logging.getLogger()
+        for handler in logger.handlers:
+            if handler.level < logger.level:
+                handler.setLevel(logger.level)
+
+    def config_playback_log(self):
+
+        if "log_playback_file" in self.parameters:
+            filename = os.path.join(self.parameters["experiment_path"],
+                                    self.parameters["log_playback_file"])
+        else:
+            filename = os.path.join(self.parameters["experiment_path"],
+                                    "audio_playback.log")
+
+        playback_handler = logging.FileHandler(filename)
+        playback_handler.setLevel(logging.DEBUG)
+        playback_handler.setFormatter(logging.Formatter("%(asctime)s: %(message)s"))
+        playback_filter = AudioPlaybackFilter()
+        playback_handler.addFilter(playback_filter)
+
+        logger = logging.getLogger("pyoperant.interfaces.pyaudio_")
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(playback_handler)
 
         logger = logging.getLogger()
         for handler in logger.handlers:

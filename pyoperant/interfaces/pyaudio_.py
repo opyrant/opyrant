@@ -43,6 +43,7 @@ class PyAudioInterface(base_.BaseInterface):
         self.device_info = self.pa.get_device_info_by_index(self.device_index)
 
     def close(self):
+        logger.debug("Closing device")
         try:
             self.stream.close()
         except AttributeError:
@@ -83,11 +84,13 @@ class PyAudioInterface(base_.BaseInterface):
                                    stream_callback=_callback)
 
     def _queue_wav(self,wav_file,start=False):
+        logger.debug("Queueing wavfile %s" % wav_file)
         self.wf = wave.open(wav_file)
         self.validate()
         self._get_stream(start=start)
 
     def _play_wav(self):
+        logger.debug("Playing wavfile")
         self.stream.start_stream()
 
     def _stop_wav(self):

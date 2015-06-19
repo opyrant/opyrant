@@ -40,6 +40,7 @@ class Trial(utils.Event):
         self.experiment.this_trial = self
 
         # Get the stimulus
+        # Currently this doesn't allow for any keyword arguments (e.g. replacement, shuffle)
         self.stimulus = self.condition.get()
 
         # Any pre-trial logging / computations

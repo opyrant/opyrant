@@ -22,3 +22,22 @@ class PollingFilter(logging.Filter):
             return True
 
         return False
+
+
+class AudioPlaybackFilter(logging.Filter):
+
+    def __init__(self, *args, **kwargs):
+
+        super(AudioPlaybackFilter, self).__init__(*args, **kwargs)
+
+    def filter(self, record):
+
+        if record.msg.startswith("Playing"):
+            record.msg = "Playing"
+            return True
+        elif record.msg.startswith("Stream closed"):
+            record.msg = "Stopped"
+            return True
+
+        return False
+

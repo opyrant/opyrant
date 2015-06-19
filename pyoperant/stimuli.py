@@ -116,3 +116,31 @@ class StimulusConditionWav(StimulusCondition):
         wavfile = super(StimulusConditionWav, self).get(replacement=replacement)
 
         return AuditoryStimulus.from_wav(wavfile)
+
+
+class NonrandomStimulusConditionWav(StimulusConditionWav):
+
+    def __init__(self, name="", response=None, is_rewarded=False, is_punished=False,
+                 file_path="", recursive=False):
+
+        super(StimulusConditionWav, self).__init__(name=name,
+                                                   response=response,
+                                                   is_rewarded=is_rewarded,
+                                                   is_punished=is_punished,
+                                                   file_path=file_path,
+                                                   recursive=recursive)
+
+        self.index_order = list()
+
+    def get(self, shuffle=True):
+
+        if len(self.index_order) == 0:
+            self.index_order = range(len(self.files))
+            if shuffle:
+                self.index_order = random.shuffle(self.index_order)
+
+        index = self.index_order.pop(0)
+
+        return AuditoryStimulus.from_wav(self.files[index])
+
+

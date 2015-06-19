@@ -150,9 +150,9 @@ class GoNoGoInterrupt(base.BaseExp):
         logger.debug("stimulus_main")
         self.this_trial.time = dt.datetime.now()
         logger.info("Trial %d - %s - %s - %s" % (self.this_trial.index,
-                                                   self.this_trial.time.strftime("%H:%M:%S"),
-                                                   self.this_trial.condition.name,
-                                                   self.this_trial.stimulus.name))
+                                                 self.this_trial.time.strftime("%H:%M:%S"),
+                                                 self.this_trial.condition.name,
+                                                 self.this_trial.stimulus.name))
         # ipdb.set_trace()
         self.panel.speaker.play() # already queued in stimulus_pre()
         logger.debug("played stimulus")
