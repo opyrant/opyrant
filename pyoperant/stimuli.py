@@ -137,7 +137,7 @@ class NonrandomStimulusConditionWav(StimulusConditionWav):
         if len(self.index_order) == 0:
             self.index_order = range(len(self.files))
             if shuffle:
-                self.index_order = random.shuffle(self.index_order)
+                random.shuffle(self.index_order)
 
         index = self.index_order.pop(0)
 
