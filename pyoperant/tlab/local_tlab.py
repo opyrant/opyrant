@@ -1,6 +1,7 @@
 import datetime as dt
 import os
 import logging
+import argparse
 
 from pyoperant import hwio, components, panels, utils, InterfaceError
 from pyoperant.tlab import components_tlab, hwio_tlab
@@ -243,3 +244,72 @@ class Mac(TLabPanel):
 
     def __init__(self, *args, **kwargs):
         super(Mac, self).__init__(self.configuration, *args, **kwargs)
+
+
+# Scripting methods
+def test_box(args):
+
+    box = globals()["Box%d" % args.box]()
+    box.test()
+
+
+def test_box_audio(args):
+
+    box = globals()["Box%d" % args.box]()
+    kwargs = dict()
+    if args.sound is not None:
+        kwargs["filename"] = args.sound
+    if args.repeat is not None:
+        kwargs["repeat"] = args.repeat
+
+    box.test_audio(**kwargs)
+
+
+def calibrate_box(args):
+
+    box = globals()["Box%d" % args.box]()
+    box.calibrate()
+
+def shutdown_box(args):
+
+    box = globals()["Box%d" % args.box]()
+    box.sleep()
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run methods associated with a particular box")
+    subparsers = parser.add_subparsers(title="methods",
+                                       description="Valid methods",
+                                       help="Which method to run on the specified box")
+
+    test_parser = subparsers.add_parser("test",
+                                        description="Test whether all components of a box are functioning")
+    test_parser.add_argument("box", help="Which box to run (e.g. 5)", type=int)
+    test_parser.add_argument("-s", "--sound", help="path to sound file to play")
+    test_parser.set_defaults(func=test_box)
+
+
+    # The test_audio script parser
+    test_audio_parser = subparsers.add_parser("test_audio",
+                                              description="Test just the audio of a box")
+    test_audio_parser.add_argument("box", help="Which box to run (e.g. 5)", type=int)
+    test_audio_parser.add_argument("-s", "--sound", help="path to sound file to play")
+    test_audio_parser.add_argument("--repeat", action="store_true", help="loop the sound")
+    test_audio_parser.set_defaults(func=test_box_audio)
+
+
+    # The calibrate script parser
+    calibrate_parser = subparsers.add_parser("calibrate", description="Calibrate the pecking key of a box")
+    calibrate_parser.add_argument("box", help="Which box to run (e.g. 5)", type=int)
+    calibrate_parser.set_defaults(func=calibrate_box)
+
+    # Shutdown script parser
+    shutdown_parser = subparsers.add_parser("shutdown", description="Shutdown a specified box")
+    shutdown_parser.add_argument("box", help="Which box to run (e.g. 5)", type=int)
+    shutdown_parser.set_defaults(func=shutdown_box)
+
+
+    args = parser.parse_args()
+    args.func(args)
