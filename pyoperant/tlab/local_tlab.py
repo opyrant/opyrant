@@ -194,7 +194,7 @@ class Thing1(TLabPanel):
 class Thing2(TLabPanel):
 
     configuration = {"arduino": "/dev/ttyUSB0",
-                     "speaker": "speaker1"}
+                     "speaker": "default"}
 
     def __init__(self, *args, **kwargs):
 
@@ -243,3 +243,42 @@ class Mac(TLabPanel):
 
     def __init__(self, *args, **kwargs):
         super(Mac, self).__init__(self.configuration, *args, **kwargs)
+
+
+def main(panel="Box5", test_type="test", *args, **kwargs):
+
+    if panel in locals():
+        print "Panel %s in locals" % panel
+    p = locals()[panel]() # Does this work??
+    fun = getattr(p, test_type, None)
+    if fun is not None:
+        fun(*args, **kwargs)
+    else:
+        raise ValueError("%s has no method %s" % (panel, test_type))
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run simple tests on one of the boxes")
+    parser.add_argument("test_type", help="Options are test and test_audio")
+    parser.add_argument("box", help="Which box to test")
+
+    # The test script parser
+    test_parser = subparsers.add_parser("test",
+                                        description="Test whether all components of a box are functioning")
+    test_parser.add_argument("box", help="Which box to run (e.g. 5)")
+    test_parser.add_argument("-s", "--sound", help="path to sound file to play")
+
+
+    # The test_audio script parser
+    test_audio_parser = subparsers.add_parser("test_audio",
+                                              description="Test just the audio of a box")
+    test_audio_parser.add_argument("box", help="Which box to run (e.g. 5)")
+    test_audio_parser.add_argument("-s", "--sound", help="path to sound file to play")
+    test_audio_parser.add_argument("--repeat", action="store_true", help="loop the sound")
+
+
+    # The calibrate script parser
+    calibrate_parser = subparsers.add_parser("calibrate", description="Calibrate the pecking key of a box")
+    calibrate_parser.add_argument("box", help="Which box to run (e.g. 5)")
+

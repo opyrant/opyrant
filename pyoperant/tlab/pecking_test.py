@@ -113,13 +113,37 @@ class PeckingTest(GoNoGoInterrupt):
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
+    from pyoperant import subjects
+    from pyoperant.tlab import local_tlab
 
-    box_name = sys.argv[1]
-    config_dir = os.path.expanduser(os.path.join("~", "Dropbox", "pecking_test", "configs"))
+    run_parser = argparse.ArgumentParser("run", description="Run a pecking test experiment")
+    run_parser.add_argument("box", help="Which box to run (e.g. 5)")
+    run_parser.add_argument("-c", "--config",
+                            dest="config",
+                            help="Path to a config file. Default /home/fet/Dropbox/configs/Box#.yaml")
+    run_parser.add_argument("-b", "--bird",
+                            dest="bird",
+                            help="Name of the subject. Default specified in config file")
+    run_parser.add_argument("-e", "--experimenter",
+                            dest="experimenter",
+                            help="Name of the experimenter. Default specified in config file")
+    # run_parser.add_argument("-s", "--stimdir",
+    #                         dest="stimdir",
+    #                         help="Stimulus directory. Default specified in config file")
+    run_parser.add_argument("-o", "--outputdir",
+                            dest="outputdir",
+                            help="Data output directory. Default specified in  config file")
 
-    # Load config file
-    config_file = os.path.join(config_dir, "%s.yaml" % box_name)
+    args = run_parser.parse_args()
+
+    if hasattr(args, "config"):
+        config_file = os.path.expanduser(args.config)
+    else:
+        config_dir = os.path.expanduser(os.path.join("~", "Dropbox", "pecking_test", "configs"))
+        # Load config file
+        config_file = os.path.join(config_dir, "Box%s.yaml" % args.box)
+
     if not os.path.exists(config_file):
         raise IOError("Config file does not exist: %s" % config_file)
 
@@ -128,9 +152,23 @@ if __name__ == "__main__":
     elif config_file.lower().endswith(".yaml"):
         parameters = configure.ConfigureYAML.load(config_file)
 
-    parameters["experiment_path"] = os.path.join(parameters["experiment_path"],
-                                                 parameters["subject"].name,
-                                                 dt.datetime.now().strftime("%d%m%y"))
+    if hasattr(args, "config"):
+        parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)
+
+    if hasattr(args, "bird"):
+        parameters["subject"].name = args.bird
+
+    if hasattr(args, "experimenter"):
+        parameters["experimenter"]["name"] = args.experimenter
+
+    if hasattr(args, "outputdir"):
+        parameters["experiment_path"] = os.path.join(args.outputdir,
+                                                     parameters["subject"].name,
+                                                     dt.datetime.now().strftime("%d%m%y"))
+    else:
+        parameters["experiment_path"] = os.path.join(parameters["experiment_path"],
+                                                     parameters["subject"].name,
+                                                     dt.datetime.now().strftime("%d%m%y"))
 
     if not os.path.exists(parameters["experiment_path"]):
         os.makedirs(parameters["experiment_path"])
