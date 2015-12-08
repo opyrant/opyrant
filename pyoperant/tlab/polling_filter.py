@@ -2,6 +2,8 @@ import logging
 import time
 import ipdb
 
+# TODO: Document. How do these filters work? What do they do?
+
 class PollingFilter(logging.Filter):
 
     def __init__(self, min_interval=.1, *args, **kwargs):

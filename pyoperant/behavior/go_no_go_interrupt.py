@@ -13,6 +13,10 @@ from pyoperant import components, utils, reinf, queues, configure, stimuli, subj
 
 logger = logging.getLogger(__name__)
 
+# TODO: Document classes and experiment methods
+# TODO: What do the classes override? What do they inherit and why?
+# TODO: Shouldn't /usr/local/bin/python be /usr/bin/env python?
+
 class RewardedCondition(stimuli.StimulusConditionWav):
 
     def __init__(self, file_path="", recursive=False):

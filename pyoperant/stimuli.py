@@ -8,6 +8,8 @@ from pyoperant.utils import Event
 
 logger = logging.getLogger(__name__)
 
+# TODO: Document these. What are they? What else might we want?
+
 class Stimulus(Event):
     """docstring for Stimulus"""
     def __init__(self, *args, **kwargs):
