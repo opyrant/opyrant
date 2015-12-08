@@ -87,14 +87,23 @@ class PeckingTest(GoNoGoInterrupt):
                 handler.setLevel(logger.level)
 
     def check_session_schedule(self):
+        """
+        We don't use any session scheduling, so always return True.
+        """
 
         return True
 
     def check_light_schedule(self):
+        """
+        We don't run experiments based on light-dark schedules, so always return True.
+        """
 
         return True
 
     def save(self):
+        """
+        Save the experiment parameters
+        """
 
         self.snapshot_f = os.path.join(self.parameters["experiment_path"],
                                        "configuration.yaml")
@@ -104,6 +113,10 @@ class PeckingTest(GoNoGoInterrupt):
                                      overwrite=True)
 
     def reward(self):
+        """
+        Custom reward method to put the feeder up during the reward period but still respond to pecks. If the key is pecked, the next trial begins immediately.
+        :return:
+        """
 
         self.this_trial.reward = True
         logger.debug("reward_main")
@@ -116,6 +129,9 @@ class PeckingTest(GoNoGoInterrupt):
 
 
 def run_pecking_test(args):
+    """
+    Start a new pecking test and run it using the modifications provided by args.
+    """
 
     print "Called run_pecking_test"
     box_name = "Box%d" % args.box
@@ -139,16 +155,29 @@ def run_pecking_test(args):
         parameters = configure.ConfigureJSON.load(config_file)
     elif config_file.lower().endswith(".yaml"):
         parameters = configure.ConfigureYAML.load(config_file)
+    else:
+        raise ValueError("Currently only .yaml and .json configuration files are allowed")
+
+    # The panel is specified by args.box
+    parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)
 
     # Modify the bird name
+    if args.bird is not None:
+        parameters["subject"].name = args.bird
 
     # Modify the experimenter name
+    if args.experimenter is not None:
+        parameters["experimenter"]["name"] = args.experimenter
 
     # Modify the output directory
-
-    parameters["experiment_path"] = os.path.join(parameters["experiment_path"],
-                                                 parameters["subject"].name,
-                                                 dt.datetime.now().strftime("%d%m%y"))
+    if args.outputdir is not None:
+        parameters["experiment_path"] = os.path.join(args.outputdir,
+                                                     parameters["subject"].name,
+                                                     dt.datetime.now().strftime("%d%m%y"))
+    else:
+        parameters["experiment_path"] = os.path.join(parameters["experiment_path"],
+                                                     parameters["subject"].name,
+                                                     dt.datetime.now().strftime("%d%m%y"))
 
     if not os.path.exists(parameters["experiment_path"]):
         os.makedirs(parameters["experiment_path"])
@@ -188,48 +217,4 @@ if __name__ == "__main__":
                             help="Data output directory. Default specified in  config file")
 
     args = run_parser.parse_args()
-
-    if hasattr(args, "config"):
-        config_file = os.path.expanduser(args.config)
-    else:
-        config_dir = os.path.expanduser(os.path.join("~", "Dropbox", "pecking_test", "configs"))
-        # Load config file
-        config_file = os.path.join(config_dir, "Box%s.yaml" % args.box)
-
-    if not os.path.exists(config_file):
-        raise IOError("Config file does not exist: %s" % config_file)
-
-    if config_file.lower().endswith(".json"):
-        parameters = configure.ConfigureJSON.load(config_file)
-    elif config_file.lower().endswith(".yaml"):
-        parameters = configure.ConfigureYAML.load(config_file)
-
-    if hasattr(args, "config"):
-        parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)
-
-    if hasattr(args, "bird"):
-        parameters["subject"].name = args.bird
-
-    if hasattr(args, "experimenter"):
-        parameters["experimenter"]["name"] = args.experimenter
-
-    if hasattr(args, "outputdir"):
-        parameters["experiment_path"] = os.path.join(args.outputdir,
-                                                     parameters["subject"].name,
-                                                     dt.datetime.now().strftime("%d%m%y"))
-    else:
-        parameters["experiment_path"] = os.path.join(parameters["experiment_path"],
-                                                     parameters["subject"].name,
-                                                     dt.datetime.now().strftime("%d%m%y"))
-
-    if not os.path.exists(parameters["experiment_path"]):
-        os.makedirs(parameters["experiment_path"])
-
-    data_link = os.path.expanduser(os.path.join("~", "data_%s" % box_name))
-    if os.path.exists(data_link):
-        os.remove(data_link)
-    os.symlink(parameters["experiment_path"], data_link)
-
-    # Create experiment object
-    exp = PeckingTest(**parameters)
-    exp.run()
+    run_pecking_test(args)
