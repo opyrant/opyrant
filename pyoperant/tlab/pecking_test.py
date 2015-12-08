@@ -9,6 +9,9 @@ from pyoperant.behavior.go_no_go_interrupt import GoNoGoInterrupt
 
 logger = logging.getLogger(__name__)
 
+# TODO: Clean up method to run pecking test. Which file should be run???
+# TODO: Document methods and classes
+
 class ProbeCondition(stimuli.NonrandomStimulusConditionWav):
 
     def __init__(self, file_path="", recursive=False):

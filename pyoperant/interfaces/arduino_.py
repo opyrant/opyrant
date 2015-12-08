@@ -7,6 +7,11 @@ from pyoperant import utils, InterfaceError
 
 logger = logging.getLogger(__name__)
 
+# TODO: Raise reasonable exceptions.
+# TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
+# TODO: Attempt to reconnect device if it can't be reached
+# TODO: Allow device to be connected to through multiple python instances
+
 class ArduinoInterface(base_.BaseInterface):
     """Creates a pyserial interface to communicate with an arduino via the serial connection.
     Communication is through two byte messages where the first byte specifies the channel and the second byte specifies the action.
@@ -19,9 +24,6 @@ class ArduinoInterface(base_.BaseInterface):
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
-    TODO: Raise reasonable exceptions.
-    TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
-    TODO: Attempt to reconnect device if it can't be reached
     """
 
     _default_state = dict(invert=False,
