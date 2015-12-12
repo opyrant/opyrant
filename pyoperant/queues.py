@@ -1,56 +1,58 @@
 import random
+import numpy as np
+import logging
 
+logger = logging.getLogger(__name__)
 
-def random_queue(conditions,tr_max=100,weights=None):
-    """ generator which randomly samples conditions
+def random_queue(items=None, max_items=100):
+    """ generator which randomly samples items
 
-    Args:
-       conditions (list):  The conditions to sample from. 
-       weights (list of ints): Weights of each condition
-
-    Kwargs:
-       tr_max (int): Maximum number of trial conditions to generate. (default: 100)
+    Inputs:
+        items (list): A list of items to be queued. Each element of the list can be an item or a 2-tuple of (item, weight) to weight the random choice. If item is a tuple, give each item a weight of 1.
+        max_items (int): Maximum number of items to generate. (default: 100)
 
     Returns:
-        whatever the elements of 'conditions' are
+        A single item at each iteration
+    TODO: Might be better to not use numpy. That's a big package. Perhaps only from numpy.random import choice, or something like that.
 
     """
-    if weights:
-        conditions_weighted = []
-        for cond,w in zip(conditions,weights):
-            for ww in range(w):
-                conditions_weighted += [cond]
-        conditions = conditions_weighted
+    if (items is None) or (len(items) == 0):
+        logger.debug("random_queue: items must be a list of at least length 1")
+        return
 
-    tr_num = 0
-    while tr_num < tr_max:
-        yield random.choice(conditions)
-        tr_num += 1
+    if isinstance(items[0], tuple): # What if the item is a tuple??? MUST FIX
+        items, weights = zip(*items)
+        items = list(items)
+        weights = [float(ww) / np.sum(weights) for ww in weights]
 
-def block_queue(conditions,reps=1,shuffle=False):
-    """ generate trial conditions from a block
+    ii = 0
+    while True:
+        if (max_items is not None) and (ii >= max_items):
+            break
+        yield np.random.choice(items, p=weights)
+        ii += 1
 
-    Args:
-        conditions (list):  The conditions to sample from. 
+def block_queue(items=None, repetitions=1, shuffle=False):
+    """ generator which samples items in blocks
 
-    Kwargs:
-        reps (int): number of times each item in conditions will be presented (default: 1)
+    Inputs:
+        items (list): A list of items to be queued
+        repetitions (int): The number of times each item in items will be presented (default: 1)
         shuffle (bool): Shuffles the queue (default: False)
-
     Returns:
-        whatever the elements of 'conditions' are
-
+        A single item at each iteration
+    TODO: Currently first expands the list of items 'repetitions' times. This should be done in the iteration loop, ideally.
     """
-    conditions_repeated = []
-    for rr in range(reps):
-        conditions_repeated += conditions
-    conditions = conditions_repeated
+    items_repeated = []
+    for rr in range(repetitions):
+        items_repeated += items
+    items = items_repeated
 
     if shuffle:
-        random.shuffle(conditions)
-    
-    for cond in conditions:
-        yield cond
+        random.shuffle(items)
+
+    for item in items:
+        yield item
 
 def staircase_queue(experiment,
                     start,
@@ -97,7 +99,7 @@ def staircase_queue(experiment,
 
     # subsequent trials
     while cont:
-        
+
         last = experiment.trials[-1]
 
         # staircase logic
@@ -129,3 +131,23 @@ def staircase_queue(experiment,
         elif nrev >= reversals:
             cont = False
 
+class BaseHandler(object):
+
+    def __init__(self, queue=random_queue, items=None, weights=None, queue_parameters=None):
+
+        if queue_parameters is None:
+            queue_parameters = dict()
+
+        if queue is random_queue:
+            if weights is not None:
+                items = zip(items, weights)
+
+        if not hasattr(queue, "__call__"):
+            raise TypeError("queue must be a callable function")
+
+        self.queue = queue(items=items, **queue_parameters)
+
+    def __iter__(self):
+
+        for item in self.queue:
+            yield item

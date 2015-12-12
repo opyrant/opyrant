@@ -1,9 +1,16 @@
 import time
 import datetime
 import serial
+import logging
 from pyoperant.interfaces import base_
 from pyoperant import utils, InterfaceError
 
+logger = logging.getLogger(__name__)
+
+# TODO: Raise reasonable exceptions.
+# TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
+# TODO: Attempt to reconnect device if it can't be reached
+# TODO: Allow device to be connected to through multiple python instances
 
 class ArduinoInterface(base_.BaseInterface):
     """Creates a pyserial interface to communicate with an arduino via the serial connection.
@@ -17,11 +24,13 @@ class ArduinoInterface(base_.BaseInterface):
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
-    TODO: __str__ and __repr__ methods.
-    TODO: Raise reasonable exceptions.
-    TODO:
     """
-    def __init__(self, device_name, baud_rate=9600, *args, **kwargs):
+
+    _default_state = dict(invert=False,
+                          held=False,
+                          )
+
+    def __init__(self, device_name, baud_rate=19200, inputs=None, outputs=None, *args, **kwargs):
 
         super(ArduinoInterface, self).__init__(*args, **kwargs)
 
@@ -31,26 +40,48 @@ class ArduinoInterface(base_.BaseInterface):
 
         self.read_params = ('channel', 'pullup')
         self._state = dict()
+        self.inputs = []
+        self.outputs = []
 
         self.open()
+        if inputs is not None:
+            for input_ in inputs:
+                self._config_read(*input_)
+        if outputs is not None:
+            for output in outputs:
+                self._config_write(output)
+
+    def __str__(self):
+
+        return "Arduino device at %s: %d input channels and %d output channels configured" % (self.device_name, len(self.inputs), len(self.outputs))
+
+    def __repr__(self):
+        # Add inputs and outputs to this
+        return "ArduinoInterface(%s, baud_rate=%d)" % (self.device_name, self.baud_rate)
 
     def open(self):
         '''Open a serial connection for the device
         :return: None
         '''
 
-        self.device = serial.Serial(self.device_name, self.baud_rate)
+        logger.debug("Opening device %s" % self)
+        self.device = serial.Serial(port=self.device_name,
+                                    baudrate=self.baud_rate,
+                                    timeout=5)
         if self.device is None:
             raise InterfaceError('Could not open serial device %s' % self.device_name)
-        utils.wait(1.5)
-        self.device.readline() # This line ensures that the device has initialized, but for some reason it takes much longer on linux than osx
 
+        logger.debug("Waiting for device to open")
+        self.device.readline()
+        self.device.flushInput()
+        logger.info("Successfully opened device %s" % self)
 
     def close(self):
         '''Close a serial connection for the device
         :return: None
         '''
 
+        logger.debug("Closing %s" % self)
         self.device.close()
 
     def _config_read(self, channel, pullup=False, **kwargs):
@@ -61,12 +92,19 @@ class ArduinoInterface(base_.BaseInterface):
         :return: None
         '''
 
+        logger.debug("Configuring %s, channel %d as input" % (self.device_name, channel))
         if pullup is False:
             self.device.write(self._make_arg(channel, 4))
         else:
             self.device.write(self._make_arg(channel, 5))
 
-        self._state[channel] = dict(invert=pullup, pressed=False)
+        if channel in self.outputs:
+            self.outputs.remove(channel)
+        if channel not in self.inputs:
+            self.inputs.append(channel)
+
+        self._state.setdefault(channel, self._default_state.copy())
+        self._state[channel]["invert"] = pullup
 
     def _config_write(self, channel, **kwargs):
         ''' Configure the channel to act as an output
@@ -74,7 +112,13 @@ class ArduinoInterface(base_.BaseInterface):
         :return: None
         '''
 
+        logger.debug("Configuring %s, channel %d as output" % (self.device_name, channel))
         self.device.write(self._make_arg(channel, 3))
+        if channel in self.inputs:
+            self.inputs.remove(channel)
+        if channel not in self.outputs:
+            self.outputs.append(channel)
+        self._state.setdefault(channel, self._default_state.copy())
 
     def _read_bool(self, channel, **kwargs):
         ''' Read a value from the specified channel
@@ -83,37 +127,64 @@ class ArduinoInterface(base_.BaseInterface):
         TODO: Is the comment on hanging necessary? Define my own error for any problems.
         '''
 
-        self.device.write(self._make_arg(channel, 0))
-        v = ord(self.device.read())  # Read hangs until the values are read. Not sure how to work with this
-        if v in [0, 1]:
-            try:
-                if self._state[channel]["invert"]:
-                    v = 1 - v
-                return v == 1
-            except KeyError:  # This channel has not been configured!
-                return v == 1
-                #raise InterfaceError('Channel %d of device %s has not yet been configured!' % (channel, self.device))
-        else:
-            raise InterfaceError('Could not read from serial device "%s", channel %d' % (self.device, channel))
+        if channel not in self._state:
+            raise InterfaceError("Channel %d is not configured on device %s" % (channel, self.device_name))
 
-    def _poll(self, channel, timeout=None, **kwargs):
+        if self.device.inWaiting() > 0: # There is currently data in the input buffer
+            self.device.flushInput()
+        self.device.write(self._make_arg(channel, 0))
+        # Also need to make sure self.device.read() returns something that ord can work with. Possibly except TypeError
+        while True:
+            try:
+                v = ord(self.device.read())
+                # break
+                serial.SerialException("Testing")
+            except serial.SerialException:
+            # This is to make it robust in case it accidentally disconnects or you try to access the arduino in
+            # multiple ways
+                pass
+            except TypeError:
+                ArduinoException("Could not read from arduino device")
+
+        logger.debug("Read value of %d from channel %d on %s" % (v, channel, self))
+        if v in [0, 1]:
+            if self._state[channel]["invert"]:
+                v = 1 - v
+            return v == 1
+        else:
+            logger.error("Device %s returned unexpected value of %d on reading channel %d" % (self, v, channel))
+            # raise InterfaceError('Could not read from serial device "%s", channel %d' % (self.device, channel))
+
+    def _poll(self, channel, timeout=None, wait=None, suppress_longpress=True, **kwargs):
         """ runs a loop, querying for pecks. returns peck time or "GoodNite" exception """
 
         if timeout is not None:
             start = time.time()
 
+        logger.debug("Begin polling from device %s" % self.device_name)
         while True:
             if not self._read_bool(channel):
-                if self._state[channel]["pressed"]:
-                    self._state[channel]["pressed"] = False
-            elif not self._state[channel]["pressed"]:
-                break
+                logger.debug("Polling: %s" % False)
+                # Read returned False. If the channel was previously "held" then that flag is removed
+                if self._state[channel]["held"]:
+                    self._state[channel]["held"] = False
+            else:
+                logger.debug("Polling: %s" % True)
+                # As long as the channel is not currently held, or longpresses are not being supressed, register the press
+                if (not self._state[channel]["held"]) or (not suppress_longpress):
+                    break
 
             if timeout is not None:
                 if time.time() - start >= timeout: # Return GoodNite exception?
+                    logger.debug("Polling timed out. Returning")
                     return None
 
-        self._state[channel]["pressed"] = True
+            # Wait for a specified amount of time before continuing on with the next loop
+            if wait is not None:
+                utils.wait(wait)
+
+        self._state[channel]["held"] = True
+        logger.debug("Input detected. Returning")
         return datetime.datetime.now()
 
     def _write_bool(self, channel, value, **kwargs):
@@ -123,6 +194,10 @@ class ArduinoInterface(base_.BaseInterface):
         :return: value written if succeeded
         '''
 
+        if channel not in self._state:
+            raise InterfaceError("Channel %d is not configured on device %s" % (channel, self))
+
+        logger.debug("Writing %s to device %s, channel %d" % (value, self, channel))
         if value:
             s = self.device.write(self._make_arg(channel, 1))
         else:
@@ -136,3 +211,8 @@ class ArduinoInterface(base_.BaseInterface):
     def _make_arg(channel, value):
 
         return "".join([chr(channel), chr(value)])
+
+
+class ArduinoException(Exception):
+
+    pass

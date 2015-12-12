@@ -1,6 +1,8 @@
+import logging
 from pyoperant import hwio
 from pyoperant.components import Hopper, BaseComponent
 
+logger = logging.getLogger(__name__)
 
 class HopperNoIR(Hopper):
     """ Class which holds information about a hopper
@@ -17,6 +19,8 @@ class HopperNoIR(Hopper):
     """
 
     def __init__(self, solenoid, *args, **kwargs):
+        logger.debug("Initializing HopperNoIR")
+        # super(HopperNoIR, self).__init__(self, *args, **kwargs) # not sure how to resolve this
         BaseComponent.__init__(self, *args, **kwargs)
         self.lag = 0
         if isinstance(solenoid, hwio.BooleanOutput):
@@ -24,9 +28,17 @@ class HopperNoIR(Hopper):
         else:
             raise ValueError('%s is not an output channel' % solenoid)
 
+    def __str__(self):
+
+        return "%s: solenoid at %s" % (self.__class__.__name__, self.solenoid)
+
+    def __repr__(self):
+
+        return "%s(%r)" % (self.__class__.__name__, self.solenoid)
+
     def check(self):
         """Overrides Hopper.check and always returns the status of the solenoid
         """
 
-        print "HopperNoIR.check: Beware, doesn't actually check anything!"
+        logger.debug("No checking configured for %s since there's no input port" % self.__class__.__name__)
         return self.solenoid.read()

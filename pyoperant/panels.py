@@ -5,10 +5,10 @@ class BasePanel(object):
 
     This class should be subclassed to define a local panel configuration.
 
-    To build a panel, do the following in the __init__() method of your local 
+    To build a panel, do the following in the __init__() method of your local
         subclass:
 
-    1. add instances of the necessary interfaces to the 'interfaces' dict 
+    1. add instances of the necessary interfaces to the 'interfaces' dict
         attribute:
         >>> self.interfaces['comedi'] = comedi.ComediInterface(device_name='/dev/comedi0')
 
@@ -25,7 +25,7 @@ class BasePanel(object):
     4. assign panel methods needed for operant behavior, such as 'reward':
         >>> self.reward = self.hopper.reward
 
-    5. finally, define a reset() method that will set the entire panel to a 
+    5. finally, define a reset() method that will set the entire panel to a
         neutral state:
 
         >>> def reset(self):
@@ -43,4 +43,26 @@ class BasePanel(object):
         self.outputs = []
 
     def reset(self):
-         raise NotImplementedError
+        # Should log that nothing is being reset and move on
+        
+        pass
+
+    def ready(self):
+
+        pass
+
+    def reward(self):
+
+        pass
+
+    def sleep(self):
+
+        pass
+
+    def idle(self):
+
+        pass
+
+    def wake(self):
+
+        pass

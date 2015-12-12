@@ -1,0 +1,29 @@
+{
+    "name": "go no-go interruption",
+    "description": "Testing go no-go interruption task",
+    "comments": "Sections: Top level experimental attributes, blocks, loggers",
+	"experimenter": {
+		"name": "Tyler Lee",
+		"email": "siriuslee305@gmail.com"
+	},
+	"subject": "Test",
+	"panel_name": "Box1",
+	"experiment_path": "/home/tlee/Data/pecking_test",
+    "blocks": [{
+        "rewarded": {
+            "file_path": "/auto/tdrive/tlee/operant/stimuli/trial_run_day1/reward",
+            "weight": 0.2},
+        "unrewarded": {
+            "file_path": "/auto/tdrive/tlee/operant/stimuli/trial_run_day1/nonreward",
+            "weight": 0.8}}],
+    "loggers": {
+        "file": {
+            "filename": "",
+            "level": "debug"
+        }
+    },
+	"light_schedule": ["05:00", "22:00"],
+	"session_schedule": ["05:00", "22:00"],
+	"num_sessions": 1,
+	"reward_duration": 10
+}

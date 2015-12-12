@@ -54,6 +54,7 @@ if __name__ == "__main__":
 
 
     from pyoperant.local import PANELS
+    from pyoperant.configure import ConfigureJSON, ConfigureYAML
 
     try:
         from pyoperant.local import BEHAVIORS
@@ -67,10 +68,11 @@ if __name__ == "__main__":
 
     cmd_line = parse_commandline()
 
-    config_file = os.path.join(DATAPATH,cmd_line['subject'],cmd_line['config_file'])
-
-    with open(config_file, 'rb') as config:
-        parameters = json.load(config)
+    config_file = os.path.join(DATAPATH, cmd_line['subject'], cmd_line['config_file'])
+    if config_file.lower.endswith("json"):
+        parameters = ConfigureJSON.load(config_file)
+    else:
+        parameters = ConfigureYAML.load(config_file)
 
     BehaviorProtocol = find_protocol(cmd_line['protocol'],BEHAVIORS)
 
@@ -86,4 +88,3 @@ if __name__ == "__main__":
         )
 
     behavior.run()
-
