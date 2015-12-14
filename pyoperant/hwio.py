@@ -1,8 +1,12 @@
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Classes of operant components
 class BaseIO(object):
     """any type of IO device. maintains info on interface for query IO device"""
-    def __init__(self,interface=None,params={},*args,**kwargs):
+    def __init__(self, name=None, interface=None, params={},*args,**kwargs):
+        self.name = name
         self.interface = interface
         self.params = params
 
@@ -60,21 +64,28 @@ class BooleanOutput(BaseIO):
         self.last_value = None
         self.config()
 
+
     def config(self):
         try:
+            logger.debug("Configuring BooleanOutput to write on interface % s" % self.interface)
             return self.interface._config_write(**self.params)
         except AttributeError:
+            logger.debug("Interface %s has not _config_write method" % self.interface)
             return False
 
     def read(self):
         """read status"""
         if hasattr(self.interface,'_read_bool'):
-            return self.interface._read_bool(**self.params)
+            value = self.interface._read_bool(**self.params)
+            logger.debug("Current value reported as %s" % value)
+            return value
         else:
+            logger.debug("Current value set as %s" % value)
             return self.last_value
 
     def write(self,value=False):
         """write status"""
+        logger.debug("Setting value to %s" % value)
         self.last_value = self.interface._write_bool(value=value,**self.params)
         return self.last_value
 
@@ -115,7 +126,29 @@ class AudioOutput(BaseIO):
         return self.interface._stop_wav()
 
 
+class CameraInput(BaseIO):
+
+    def __init__(self, interface=None, params={}, *args, **kwargs):
+        super(CameraInput, self).__init__(interface=interface, params=params, *args, **kwargs)
+
+        assert hasattr(interface, "record")
+        assert hasattr(interface, "stop")
+
+        if "audio_params" in self.params:
+            self.interface.configure_audio(**self.params["audio_params"])
+
+        if "video_params" in self.params:
+            self.interface.configure_video(**self.params["video_params"])
 
 
+    def snapshot(self, filename, overwrite=False):
 
+        self.interface.snapshot(filename, overwrite)
 
+    def record(self, filename, overwrite=False):
+
+        self.interface.record(filename, overwrite)
+
+    def stop(self):
+
+        self.interface.stop()

@@ -1,15 +1,11 @@
-import logging, traceback
+import logging, traceback, logging.handlers
 import os, sys, socket
 import datetime as dt
-from pyoperant import utils, components, local, hwio
-from pyoperant import ComponentError, InterfaceError
-from pyoperant.behavior import shape
+from pyoperant import utils, components, local, hwio, configure
+from pyoperant import ComponentError, InterfaceError, EndExperiment
+from pyoperant import states, trials, subjects
 
-
-try:
-    import simplejson as json
-except ImportError:
-    import json
+logger = logging.getLogger(__name__)
 
 def _log_except_hook(*exc_info):
     text = "".join(traceback.format_exception(*exc_info))
@@ -21,200 +17,283 @@ class BaseExp(object):
     Keyword arguments:
     name -- name of this experiment
     desc -- long description of this experiment
-    debug -- (bool) flag for debugging (default=False)
+    debug -- (bool) flag for debugging, switches the logging stream handler
+        between debug and info levels (default=False)
     light_schedule  -- the light schedule for the experiment. either 'sun' or
         a tuple of (starttime,endtime) tuples in (hhmm,hhmm) form defining
         time intervals for the lights to be on
     experiment_path -- path to the experiment
     stim_path -- path to stimuli (default = <experiment_path>/stims)
-    subject -- identifier of the subject
+    subject -- an instance of a Subject() object
     panel -- instance of local Panel() object
+    log_handlers -- A list of dictionaries for configuring log handlers. Currently
+        supported handler types are file and email (in addition to the default stream
+        handler)
+    blocks -- A list of Block() objects
 
     Methods:
     run() -- runs the experiment
 
     """
-    def __init__(self,
-                 name='',
-                 description='',
-                 debug=False,
-                 filetime_fmt='%Y%m%d%H%M%S',
-                 light_schedule='sun',
-                 idle_poll_interval = 60.0,
-                 experiment_path='',
-                 stim_path='',
-                 subject='',
-                 panel=None,
-                 log_handlers=[],
-                 *args, **kwargs):
-        super(BaseExp,  self).__init__()
 
+    # This should contain all states to be used in the state machine.
+    # "idle" is the only one that is required.
+    STATE_DICT = dict(idle=states.Idle,
+                      sleep=states.Sleep,
+                      session=states.Session)
+
+    def __init__(self, name='', description='', debug=False,
+                 filetime_fmt='%Y%m%d%H%M%S', light_schedule='sun',
+                 idle_poll_interval = 60.0, experiment_path='',
+                 stim_path='', subject=None, panel=None, log_handlers=None,
+                 blocks=None, *args, **kwargs):
+
+        super(BaseExp, self).__init__()
+        REQ_PANEL_ATTR = ["sleep", "reset"]
+
+        # Initialize experiment parameters received as input
         self.name = name
         self.description = description
         self.debug = debug
         self.timestamp = dt.datetime.now().strftime(filetime_fmt)
+
         self.parameters = kwargs
         self.parameters['filetime_fmt'] = filetime_fmt
         self.parameters['light_schedule'] = light_schedule
         self.parameters['idle_poll_interval'] = idle_poll_interval
 
         self.parameters['experiment_path'] = experiment_path
+        if not os.path.exists(self.parameters["experiment_path"]):
+            logger.debug("Creating %s" % self.parameters["experiment_path"])
+            os.makedirs(self.parameters["experiment_path"])
+
         if stim_path == '':
-            self.parameters['stim_path'] = os.path.join(experiment_path,'stims')
+            self.parameters['stim_path'] = os.path.join(experiment_path,
+                                                        'stims')
         else:
             self.parameters['stim_path'] = stim_path
-        self.parameters['subject'] = subject
+        self.parameters['subject'] = subject.name
 
         # configure logging
+        if not log_handlers:
+            log_handlers = dict()
         self.parameters['log_handlers'] = log_handlers
         self.log_config()
+        # Should a file log be mandatory and set up by default? If so, bring it
+        # out of the for loop
+        for handler_config in log_handlers.keys():
+            if handler_config == "file":
+                self.add_file_handler()
+            elif handler_config == "email":
+                self.add_email_handler()
 
-        self.req_panel_attr= ['house_light',
-                              'reset',
-                              ]
         self.panel = panel
-        self.log.debug('panel %s initialized' % self.parameters['panel_name'])
+        self.req_panel_attr = REQ_PANEL_ATTR # Copy the list
+        logger.info('panel %s initialized' % self.panel.__class__.__name__)
 
-        if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
-            self.parameters['shape'] = None
+        logger.info("Preparing block objects")
+        self.blocks = blocks
+        for blk in self.blocks:
+            blk.experiment = self
 
-        self.shaper = shape.Shaper(self.panel, self.log, self.parameters, self.log_error_callback)
+        logger.info("Preparing subject object")
+        self.subject = subject
+        self.subject.experiment = self
+        #
+        # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
+        #     self.parameters['shape'] = None
+        #
+        # self.shaper = shape.Shaper(self.panel, logger, self.parameters, self.log_error_callback)
 
     def save(self):
         self.snapshot_f = os.path.join(self.parameters['experiment_path'], self.timestamp+'.json')
-        with open(self.snapshot_f, 'wb') as config_snap:
-            json.dump(self.parameters, config_snap, sort_keys=True, indent=4)
+        logger.debug("Saving snapshot of parameters to %s" % self.snapshot_f)
+        if self.snapshot_f.lower().endswith(".json"):
+            configure.ConfigureJSON.save(self.parameters, self.snapshot_f, overwrite=True)
+        elif self.snapshot_f.lower().endswith(".yaml"):
+            configure.ConfigureYAML.save(self.parameters, self.snapshot_f, overwrite=True)
 
+    # Logging configure methods
     def log_config(self):
 
-        self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
-
-        if self.debug:
+        if "stream" in self.parameters["log_handlers"]:
+            self.log_level = self.parameters["log_handlers"]["stream"].get("level", logging.INFO)
+        elif self.debug:
             self.log_level = logging.DEBUG
         else:
             self.log_level = logging.INFO
 
         sys.excepthook = _log_except_hook # send uncaught exceptions to log file
 
-        logging.basicConfig(filename=self.log_file,
-                            level=self.log_level,
+        logging.basicConfig(level=self.log_level,
                             format='"%(asctime)s","%(levelname)s","%(message)s"')
-        self.log = logging.getLogger()
 
-        if 'email' in self.parameters['log_handlers']:
-            from pyoperant.local import SMTP_CONFIG
-            from logging import handlers
-            SMTP_CONFIG['toaddrs'] = [self.parameters['experimenter']['email'],]
+        # Make sure that the stream handler has the requested log level.
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                handler.setLevel(self.log_level)
 
-            email_handler = handlers.SMTPHandler(**SMTP_CONFIG)
-            email_handler.setLevel(logging.WARNING)
+    def add_file_handler(self):
+        """ Add a file handler to the root logger using either default
+        settings or settings from the config file
+        """
+        self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
+        props = dict()
+        if "file" in self.parameters["log_handlers"]:
+            props = self.parameters["log_handlers"]["file"]
+            if props["filename"]:
+                self.log_file = os.path.join(self.parameters["experiment_path"], props["filename"])
 
-            heading = '%s\n' % (self.parameters['subject'])
-            formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
-            email_handler.setFormatter(formatter)
+        file_handler = logging.FileHandler(self.log_file)
+        level = props.get("level", self.log_level)
+        formatter = props.get("format", '"%(asctime)s","%(levelname)s","%(message)s"')
+        file_handler.setLevel(level)
+        file_handler.setFormatter(logging.Formatter(formatter))
+        root_logger = logging.getLogger()
+        # Make sure the root logger's level is not too high
+        if root_logger.level > level:
+            root_logger.setLevel(level)
+        root_logger.addHandler(file_handler)
+        logger.debug("File handler added to %s with level %d" % (self.log_file, level))
 
-            self.log.addHandler(email_handler)
+    def add_email_handler(self):
+        """Add an email handler to the root logger using configurations from the
+        config file.
+        """
+        handler_config = self.parameters["log_handlers"]["email"]
+        level = handler_config.pop("level", logging.ERROR)
+        email_handler = logging.handlers.SMTPHandler(**handler_config)
+        email_handler.setLevel(level)
 
+        heading = '%s\n' % (self.parameters['subject'])
+        formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
+        email_handler.setFormatter(formatter)
+        root_logger = logging.getLogger()
+        # Make sure the root logger's level is not too high
+        if root_logger.level > level:
+            root_logger.setLevel(level)
+        root_logger.addHandler(email_handler)
+        logger.debug("Email handler added to %s with level %d" % (",".join(email_handler.toaddrs), level))
+
+    # Scheduling methods
     def check_light_schedule(self):
         """returns true if the lights should be on"""
-        return utils.check_time(self.parameters['light_schedule'])
+
+        lights_on = utils.check_time(self.parameters['light_schedule'])
+        logger.debug("Checking light schedule: %s" % lights_on)
+        return lights_on
 
     def check_session_schedule(self):
         """returns True if the subject should be running sessions"""
-        return False
 
-    def panel_reset(self):
-        try:
-            self.panel.reset()
-        except components.ComponentError as err:
-            self.log.error("component error: %s" % str(err))
+        session_on = False
+        if "session_schedule" in self.parameters:
+            session_on = utils.check_time(self.parameters["session_schedule"])
 
+        logger.debug("Checking session schedule: %s" % session_on)
+        return session_on
+
+    def schedule_current_session(self):
+
+        duration = self.parameters.get("session_duration", -dt.timedelta(minutes=1))
+        start = getattr(self, "session_start_time", dt.datetime.now())
+        schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
+        self.parameters.setdefault("session_schedule", []).append(schedule)
+        logger.info("Scheduled current session for %s" % " to ".join(schedule))
+
+    def schedule_next_session(self):
+
+        current_time = dt.datetime.now()
+        delay = self.parameters.get("intersession_interval", -dt.timedelta(minutes=1))
+        start = current_time + delay
+        stop = current_time - dt.timedelta(minutes=1)
+        schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
+        self.parameters.setdefault("session_schedule", []).append(schedule)
+        logger.info("Scheduled next session for %s" % " to ".join(schedule))
+
+    def end(self):
+
+        self.panel.sleep()
+        raise EndExperiment
+
+
+    # State and trial logic. It might be good to have these methods do some common sense functions / logging
     def run(self):
 
         for attr in self.req_panel_attr:
-            assert hasattr(self.panel,attr)
-        self.panel_reset()
-        self.save()
-        self.init_summary()
+            logger.debug("Checking that panel has attribute %s" % attr)
+            assert hasattr(self.panel, attr)
 
-        self.log.info('%s: running %s with parameters in %s' % (self.name,
-                                                                self.__class__.__name__,
-                                                                self.snapshot_f,
-                                                                )
+        logger.debug("Resetting panel")
+        self.panel.reset()
+        self.save()
+        # self.init_summary()
+
+        logger.info('%s: running %s with parameters in %s' % (self.name,
+                                                              self.__class__.__name__,
+                                                              self.snapshot_f,
+                                                              )
                       )
         if self.parameters['shape']:
-                self.shaper.run_shape(self.parameters['shape'])
-        while True: #is this while necessary
-            utils.run_state_machine(start_in='idle',
-                                    error_state='idle',
-                                    error_callback=self.log_error_callback,
-                                    idle=self._run_idle,
-                                    sleep=self._run_sleep,
-                                    session=self._run_session)
+            logger.info("Running shaping")
+            self.shaper.run_shape(self.parameters['shape'])
 
-    def _run_idle(self):
-        if self.check_light_schedule() == False:
-            return 'sleep'
-        elif self.check_session_schedule():
-            return 'session'
-        else:
-            self.panel_reset()
-            self.log.debug('idling...')
-            utils.wait(self.parameters['idle_poll_interval'])
-            return 'idle'
-
-
-
-    # defining functions for sleep
-    def sleep_pre(self):
-        self.log.debug('lights off. going to sleep...')
-        return 'main'
-
-    def sleep_main(self):
-        """ reset expal parameters for the next day """
-        self.log.debug('sleeping...')
-        self.panel.house_light.off()
-        utils.wait(self.parameters['idle_poll_interval'])
-        if self.check_light_schedule() == False:
-            return 'main'
-        else:
-            return 'post'
-
-    def sleep_post(self):
-        self.log.debug('ending sleep')
-        self.panel.house_light.on()
-        self.init_summary()
-        return None
-
-    def _run_sleep(self):
-        utils.run_state_machine(start_in='pre',
-                                error_state='post',
-                                error_callback=self.log_error_callback,
-                                pre=self.sleep_pre,
-                                main=self.sleep_main,
-                                post=self.sleep_post)
-        return 'idle'
+        logger.debug("Entering state machine")
+        states.run_state_machine(self,
+                                 start_in='idle',
+                                 error_state='idle',
+                                 **self.STATE_DICT)
 
     # session
-
     def session_pre(self):
-        return 'main'
+        pass
 
     def session_main(self):
-        return 'post'
+        pass
 
     def session_post(self):
-        return None
+        pass
 
-    def _run_session(self):
-        utils.run_state_machine(start_in='pre',
-                                error_state='post',
-                                error_callback=self.log_error_callback,
-                                pre=self.session_pre,
-                                main=self.session_main,
-                                post=self.session_post)
-        return 'idle'
+    # Defining the different trial states. If any of these are not needed by the behavior, just don't define them in your subclass
+    def trial_pre(self):
+        pass
 
+    def stimulus_pre(self):
+        pass
+
+    def stimulus_main(self):
+        pass
+
+    def stimulus_post(self):
+        pass
+
+    def response_pre(self):
+        pass
+
+    def response_main(self):
+        pass
+
+    def response_post(self):
+        pass
+
+    def consequate_pre(self):
+        pass
+
+    def consequate_main(self):
+        pass
+
+    def consequate_post(self):
+        pass
+
+    def reward(self):
+        pass
+
+    def punish(self):
+        pass
+
+    def trial_post(self):
+        pass
 
     # gentner-lab specific functions
     def init_summary(self):
@@ -244,4 +323,4 @@ class BaseExp(object):
 
     def log_error_callback(self, err):
         if err.__class__ is InterfaceError or err.__class__ is ComponentError:
-            self.log.critical(str(err))
+            logger.critical(str(err))

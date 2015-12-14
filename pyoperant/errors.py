@@ -3,6 +3,10 @@ class GoodNite(Exception):
     """ exception for when the lights should be off """
     pass
 
+class EndExperiment(Exception):
+    """ exception for when an experiment should terminate"""
+    pass
+
 class EndSession(Exception):
     """ exception for when a session should terminate """
     pass
