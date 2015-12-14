@@ -58,7 +58,7 @@ class StimulusCondition(object):
             raise IOError("No stimulus file_path provided!")
 
         if not os.path.exists(file_path):
-            raise IOError("Stimulus file_path does not exist!")
+            raise IOError("Stimulus file_path does not exist! %s" % file_path)
 
         self.name = name
         self.response = response
@@ -142,5 +142,3 @@ class NonrandomStimulusConditionWav(StimulusConditionWav):
         index = self.index_order.pop(0)
 
         return AuditoryStimulus.from_wav(self.files[index])
-
-
