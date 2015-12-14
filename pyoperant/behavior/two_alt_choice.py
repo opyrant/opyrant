@@ -1,5 +1,3 @@
-#!/usr/local/bin/python
-
 import os
 import csv
 import copy
@@ -106,6 +104,9 @@ class TwoAltChoiceExp(base.BaseExp):
         if 'session_schedule' not in self.parameters:
             self.parameters['session_schedule'] = self.parameters['light_schedule']
 
+        if 'no_response_correction_trials' not in self.parameters:
+            self.parameters['no_response_correction_trials'] = False
+
     def make_data_csv(self):
         """ Create the csv file to save trial data
 
@@ -136,6 +137,8 @@ class TwoAltChoiceExp(base.BaseExp):
         port through `experiment.class_assoc['L']`.
 
         """
+        assert len(self.parameters['classes'])==2, 'does not currently support > 2 classes'
+
         self.class_assoc = {}
         for class_, class_params in self.parameters['classes'].items():
             try:
@@ -188,9 +191,9 @@ class TwoAltChoiceExp(base.BaseExp):
                     self.trial_q = queues.random_queue(**blk)
                 elif q_type=='block':
                     self.trial_q = queues.block_queue(**blk)
-                elif q_type=='staircase':
-                    self.trial_q = queues.staircase_queue(self,**blk)
-
+                elif q_type=='mixedDblStaircase':
+                    dbl_staircases = [queues.DoubleStaircaseReinforced(stims) for stims in blk['stim_lists']]
+                    self.trial_q = queues.MixedAdaptiveQueue.load(os.path.join(self.parameters['experiment_path'], 'persistentQ.pkl'), dbl_staircases)
                 try: 
                     run_trial_queue()
                 except EndSession:
@@ -352,7 +355,7 @@ class TwoAltChoiceExp(base.BaseExp):
                     self.do_correction = False
                 elif self.this_trial.response == 'none':
                     if self.this_trial.type_ == 'normal':
-                        self.do_correction = False
+                        self.do_correction = self.parameters['no_response_correction_trials']
             else:
                 self.do_correction = False
         else:
@@ -372,6 +375,8 @@ class TwoAltChoiceExp(base.BaseExp):
         while trial_time is None:
             if self.check_session_schedule()==False:
                 self.panel.center.off()
+                self.panel.speaker.stop()
+                self.update_adaptive_queue(presented=False)
                 raise EndSession
             else:
                 trial_time = self.panel.center.poll(timeout=60.0)
@@ -430,17 +435,18 @@ class TwoAltChoiceExp(base.BaseExp):
         self.log.debug('waiting for response')
 
     def response_main(self):
+        response_start = dt.datetime.now()
         while True:
             elapsed_time = (dt.datetime.now() - self.this_trial.time).total_seconds()
-            rt = elapsed_time - self.this_trial.stimulus_event.time
-            if rt > self.this_trial.annotations['max_wait']:
+            response_time = elapsed_time - self.this_trial.stimulus_event.time
+            if response_time > self.this_trial.annotations['max_wait']:
                 self.panel.speaker.stop()
                 self.this_trial.response = 'none'
                 self.log.info('no response')
                 return
             for class_, port in self.class_assoc.items():
                 if port.status():
-                    self.this_trial.rt = rt
+                    self.this_trial.rt = (dt.datetime.now() - response_start).total_seconds()
                     self.panel.speaker.stop()
                     self.this_trial.response = class_
                     self.summary['responses'] += 1
@@ -478,7 +484,7 @@ class TwoAltChoiceExp(base.BaseExp):
                 self.reward_post()
 
         # no response
-        elif self.this_trial.response is 'none':
+        elif self.this_trial.response == 'none':
             pass
 
         # incorrect trial
@@ -490,7 +496,14 @@ class TwoAltChoiceExp(base.BaseExp):
                 self.punish_post()
 
     def consequence_post(self):
-        pass
+        self.update_adaptive_queue()
+
+    def update_adaptive_queue(self, presented=True):
+        if self.this_trial.type_ == 'normal' and isinstance(self.trial_q, queues.AdaptiveBase):
+            if presented:
+                self.trial_q.update(self.this_trial.correct, self.this_trial.response == 'none')
+            else:
+                self.trial_q.update(False, True)
 
 
     def secondary_reinforcement(self,value=1.0):
@@ -516,7 +529,7 @@ class TwoAltChoiceExp(base.BaseExp):
             self.summary['hopper_already_up'] += 1
             self.log.warning("hopper already up on panel %s" % str(err))
             utils.wait(self.parameters['classes'][self.this_trial.class_]['reward_value'])
-            self.panel.reset()
+            #self.panel.reset()
 
         except components.HopperWontComeUpError as err:
             self.this_trial.reward = 'error'
@@ -536,7 +549,7 @@ class TwoAltChoiceExp(base.BaseExp):
             self.this_trial.reward = 'error'
             self.summary['hopper_wont_go_down'] += 1
             self.log.warning("hopper didn't go down on panel %s" % str(err))
-            self.panel.reset()
+            #self.panel.reset()
 
         finally:
             self.panel.house_light.on()
@@ -558,25 +571,3 @@ class TwoAltChoiceExp(base.BaseExp):
 
     def punish_post(self):
         pass
-
-if __name__ == "__main__":
-
-    try: import simplejson as json
-    except ImportError: import json
-
-    from pyoperant.local import PANELS
-
-    cmd_line = utils.parse_commandline()
-    with open(cmd_line['config_file'], 'rb') as config:
-            parameters = json.load(config)
-
-    assert utils.check_cmdline_params(parameters, cmd_line)
-
-    if parameters['debug']:
-        print parameters
-        print PANELS
-
-    panel = PANELS[parameters['panel_name']]()
-
-    exp = TwoAltChoiceExp(panel=panel,**parameters)
-    exp.run()

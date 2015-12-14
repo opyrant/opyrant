@@ -58,7 +58,7 @@ class FixedRatioSchedule(BaseSchedule):
     """
     def __init__(self, ratio=1):
         super(FixedRatioSchedule, self).__init__()
-        self.ratio = ratio
+        self.ratio = max(ratio,1)
         self._update()
 
     def _update(self):
