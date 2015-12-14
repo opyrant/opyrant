@@ -126,29 +126,3 @@ class AudioOutput(BaseIO):
         return self.interface._stop_wav()
 
 
-class CameraInput(BaseIO):
-
-    def __init__(self, interface=None, params={}, *args, **kwargs):
-        super(CameraInput, self).__init__(interface=interface, params=params, *args, **kwargs)
-
-        assert hasattr(interface, "record")
-        assert hasattr(interface, "stop")
-
-        if "audio_params" in self.params:
-            self.interface.configure_audio(**self.params["audio_params"])
-
-        if "video_params" in self.params:
-            self.interface.configure_video(**self.params["video_params"])
-
-
-    def snapshot(self, filename, overwrite=False):
-
-        self.interface.snapshot(filename, overwrite)
-
-    def record(self, filename, overwrite=False):
-
-        self.interface.record(filename, overwrite)
-
-    def stop(self):
-
-        self.interface.stop()
