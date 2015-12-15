@@ -2,6 +2,8 @@ import logging
 from pyoperant import queues, utils
 
 logger = logging.getLogger(__name__)
+# TODO: Document Block and BlockHandler objects
+# TODO: How do these objects work? What is a block? What are they used for?
 
 class Block(utils.Event):
 

@@ -7,6 +7,11 @@ from pyoperant import utils, InterfaceError
 
 logger = logging.getLogger(__name__)
 
+# TODO: Raise reasonable exceptions.
+# TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
+# TODO: Attempt to reconnect device if it can't be reached
+# TODO: Allow device to be connected to through multiple python instances
+
 class ArduinoInterface(base_.BaseInterface):
     """Creates a pyserial interface to communicate with an arduino via the serial connection.
     Communication is through two byte messages where the first byte specifies the channel and the second byte specifies the action.
@@ -19,9 +24,6 @@ class ArduinoInterface(base_.BaseInterface):
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
     :param baud_rate: The baud rate for serial communication
-    TODO: Raise reasonable exceptions.
-    TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
-    TODO: Attempt to reconnect device if it can't be reached
     """
 
     _default_state = dict(invert=False,
@@ -131,7 +133,19 @@ class ArduinoInterface(base_.BaseInterface):
         if self.device.inWaiting() > 0: # There is currently data in the input buffer
             self.device.flushInput()
         self.device.write(self._make_arg(channel, 0))
-        v = ord(self.device.read())
+        # Also need to make sure self.device.read() returns something that ord can work with. Possibly except TypeError
+        while True:
+            try:
+                v = ord(self.device.read())
+                # break
+                serial.SerialException("Testing")
+            except serial.SerialException:
+            # This is to make it robust in case it accidentally disconnects or you try to access the arduino in
+            # multiple ways
+                pass
+            except TypeError:
+                ArduinoException("Could not read from arduino device")
+
         logger.debug("Read value of %d from channel %d on %s" % (v, channel, self))
         if v in [0, 1]:
             if self._state[channel]["invert"]:
@@ -197,3 +211,8 @@ class ArduinoInterface(base_.BaseInterface):
     def _make_arg(channel, value):
 
         return "".join([chr(channel), chr(value)])
+
+
+class ArduinoException(Exception):
+
+    pass

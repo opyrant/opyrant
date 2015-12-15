@@ -5,6 +5,7 @@ from pyoperant.interfaces import base_
 from pyoperant import InterfaceError
 
 logger = logging.getLogger(__name__)
+# TODO: Clean up _stop_wav logging changes
 
 class PyAudioInterface(base_.BaseInterface):
     """Class which holds information about an audio device

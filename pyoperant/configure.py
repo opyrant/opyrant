@@ -1,6 +1,9 @@
 import os
-import ipdb
 from functools import wraps
+
+# TODO: Do we use functools here?
+# TODO: What is ConfigurableYAML?
+# TODO: What is the best way to import within classes
 
 class Configure(object):
 
@@ -10,12 +13,18 @@ class Configure(object):
 
         pass
 
+
 class ConfigureJSON(Configure):
 
     global_config = None
 
     @classmethod
     def load(cls, config_file):
+        """
+        Load experiment parameters from a JSON configuration file
+        :param config_file: path to a JSON configuration file
+        :return: dictionary of parameters to pass to a behavior
+        """
         try:
             import simplejson as json
         except ImportError:
@@ -35,6 +44,12 @@ class ConfigureJSON(Configure):
 
     @staticmethod
     def save(parameters, filename, overwrite=False):
+        """
+        Save a dictionary of parameters to an experiment JSON config file
+        :param parameters: dictionary of experiment parameters
+        :param filename: path to output file
+        :param overwrite: whether or not to overwrite if the output file already exists
+        """
         try:
             import simplejson as json
         except ImportError:
@@ -50,12 +65,18 @@ class ConfigureJSON(Configure):
                       indent=4,
                       separators=(",", ":"))
 
+
 class ConfigureYAML(Configure):
 
     global_config = None
 
     @classmethod
     def load(cls, config_file):
+        """
+        Load experiment parameters from a YAML configuration file
+        :param config_file: path to a YAML configuration file
+        :return: dictionary of parameters to pass to a behavior
+        """
         import yaml
 
         if cls.global_config and os.path.isfile(cls.global_config):
@@ -71,6 +92,12 @@ class ConfigureYAML(Configure):
 
     @staticmethod
     def save(parameters, filename, overwrite=False):
+        """
+        Save a dictionary of parameters to an experiment YAML config file
+        :param parameters: dictionary of experiment parameters
+        :param filename: path to output file
+        :param overwrite: whether or not to overwrite if the output file already exists
+        """
         import yaml
 
         if os.path.exists(filename) and (overwrite == False):
@@ -83,6 +110,7 @@ class ConfigureYAML(Configure):
                       explicit_end=True)
 
 
+## What is this??
 class ConfigurableYAML(type):
 
     def __new__(cls, *args, **kwargs):

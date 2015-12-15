@@ -195,7 +195,7 @@ class Thing1(TLabPanel):
 class Thing2(TLabPanel):
 
     configuration = {"arduino": "/dev/ttyUSB0",
-                     "speaker": "speaker1"}
+                     "speaker": "default"}
 
     def __init__(self, *args, **kwargs):
 
@@ -290,7 +290,6 @@ if __name__ == "__main__":
     test_parser.add_argument("-s", "--sound", help="path to sound file to play")
     test_parser.set_defaults(func=test_box)
 
-
     # The test_audio script parser
     test_audio_parser = subparsers.add_parser("test_audio",
                                               description="Test just the audio of a box")
@@ -298,7 +297,6 @@ if __name__ == "__main__":
     test_audio_parser.add_argument("-s", "--sound", help="path to sound file to play")
     test_audio_parser.add_argument("--repeat", action="store_true", help="loop the sound")
     test_audio_parser.set_defaults(func=test_box_audio)
-
 
     # The calibrate script parser
     calibrate_parser = subparsers.add_parser("calibrate", description="Calibrate the pecking key of a box")
