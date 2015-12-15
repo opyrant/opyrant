@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/local/bin/python
 import os
 import logging
 import datetime as dt
@@ -6,7 +6,6 @@ from pyoperant import configure
 from pyoperant import stimuli
 from pyoperant.tlab.polling_filter import PollingFilter, AudioPlaybackFilter
 from pyoperant.behavior.go_no_go_interrupt import GoNoGoInterrupt
-from pyoperant.tlab import local_tlab
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +159,7 @@ def run_pecking_test(args):
         raise ValueError("Currently only .yaml and .json configuration files are allowed")
 
     # The panel is specified by args.box
-    parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)()
+    parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)
 
     # Modify the bird name
     if args.bird is not None:

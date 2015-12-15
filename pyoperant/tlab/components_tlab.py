@@ -1,5 +1,6 @@
 import logging
-from pyoperant import hwio
+import datetime as dt
+from pyoperant import hwio, utils
 from pyoperant.components import Hopper, BaseComponent
 
 logger = logging.getLogger(__name__)
@@ -48,9 +49,11 @@ class HopperNoIR(Hopper):
         """
 
         self.solenoid.write(True)
+        return dt.datetime.now()
 
     def down(self):
         """Lowers the hopper without checking.
         """
 
         self.solenoid.write(False)
+        return dt.datetime.now()
