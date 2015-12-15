@@ -42,3 +42,15 @@ class HopperNoIR(Hopper):
 
         logger.debug("No checking configured for %s since there's no input port" % self.__class__.__name__)
         return self.solenoid.read()
+
+    def up(self):
+        """Raises the hopper up without checking.
+        """
+
+        self.solenoid.write(True)
+
+    def down(self):
+        """Lowers the hopper without checking.
+        """
+
+        self.solenoid.write(False)
