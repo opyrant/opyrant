@@ -152,7 +152,7 @@ class TLabPanel(panels.BasePanel):
 
         return [float(pc) / duration for pc in num_polls]
 
-    def sound_then_feeder(self, filename="", duration=12, flash=False):
+    def sound_then_feeder(self, filename="", duration=12, flash=False, flash_dur=3):
         """ Pairs the sound playback with the feeder coming up.
         Hit Ctrl+C to stop the sound or put the feeder down.
         :param filename: path to sound file.
@@ -165,7 +165,7 @@ class TLabPanel(panels.BasePanel):
         self.speaker.queue(filename)
 
         if flash:
-            self.peck_port.flash()
+            self.peck_port.flash(dur=flash_dur)
 
         self.speaker.play()
         try:
