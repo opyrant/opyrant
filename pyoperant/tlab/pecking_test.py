@@ -160,7 +160,7 @@ def run_pecking_test(args):
         raise ValueError("Currently only .yaml and .json configuration files are allowed")
 
     # The panel is specified by args.box
-    parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)
+    parameters["panel"] = getattr(local_tlab, "Box%d" % args.box)()
 
     # Modify the bird name
     if args.bird is not None:
