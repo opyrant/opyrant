@@ -137,8 +137,8 @@ class ArduinoInterface(base_.BaseInterface):
         while True:
             try:
                 v = ord(self.device.read())
-                # break
-                serial.SerialException("Testing")
+                break
+                # serial.SerialException("Testing")
             except serial.SerialException:
             # This is to make it robust in case it accidentally disconnects or you try to access the arduino in
             # multiple ways

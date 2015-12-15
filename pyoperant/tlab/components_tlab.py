@@ -22,7 +22,7 @@ class HopperNoIR(Hopper):
         logger.debug("Initializing HopperNoIR")
         # super(HopperNoIR, self).__init__(self, *args, **kwargs) # not sure how to resolve this
         BaseComponent.__init__(self, *args, **kwargs)
-        self.lag = 0
+        self.max_lag = 0
         if isinstance(solenoid, hwio.BooleanOutput):
             self.solenoid = solenoid
         else:
@@ -42,3 +42,15 @@ class HopperNoIR(Hopper):
 
         logger.debug("No checking configured for %s since there's no input port" % self.__class__.__name__)
         return self.solenoid.read()
+
+    def up(self):
+        """Raises the hopper up without checking.
+        """
+
+        self.solenoid.write(True)
+
+    def down(self):
+        """Lowers the hopper without checking.
+        """
+
+        self.solenoid.write(False)
