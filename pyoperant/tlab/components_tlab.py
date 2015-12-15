@@ -22,7 +22,7 @@ class HopperNoIR(Hopper):
         logger.debug("Initializing HopperNoIR")
         # super(HopperNoIR, self).__init__(self, *args, **kwargs) # not sure how to resolve this
         BaseComponent.__init__(self, *args, **kwargs)
-        self.lag = 0
+        self.max_lag = 0
         if isinstance(solenoid, hwio.BooleanOutput):
             self.solenoid = solenoid
         else:
