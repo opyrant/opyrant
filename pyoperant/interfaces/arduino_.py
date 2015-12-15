@@ -7,13 +7,12 @@ from pyoperant import utils, InterfaceError
 
 logger = logging.getLogger(__name__)
 
-# TODO: Raise reasonable exceptions.
 # TODO: Smart find arduinos using something like this: http://stackoverflow.com/questions/19809867/how-to-check-if-serial-port-is-already-open-by-another-process-in-linux-using
 # TODO: Attempt to reconnect device if it can't be reached
-# TODO: Allow device to be connected to through multiple python instances
+# TODO: Allow device to be connected to through multiple python instances. This kind of works but needs to be tested thoroughly.
 
 class ArduinoInterface(base_.BaseInterface):
-    """Creates a pyserial interface to communicate with an arduino via the serial connection.
+    """Creates a pyserial interface to communicate with an Arduino via the serial connection.
     Communication is through two byte messages where the first byte specifies the channel and the second byte specifies the action.
     Valid actions are:
     0. Read input value
@@ -23,7 +22,7 @@ class ArduinoInterface(base_.BaseInterface):
     4. Sets channel as an input
     5. Sets channel as an input with a pullup resistor (basically inverts the input values)
     :param device_name: The address of the device on the local system (e.g. /dev/tty.usbserial)
-    :param baud_rate: The baud rate for serial communication
+    :param baud_rate: The baud (bits/second) rate for serial communication. If this is changed, then it also needs to be changed in the arduino project code.
     """
 
     _default_state = dict(invert=False,
@@ -124,7 +123,11 @@ class ArduinoInterface(base_.BaseInterface):
         ''' Read a value from the specified channel
         :param channel: the channel from which to read
         :return: value
-        TODO: Is the comment on hanging necessary? Define my own error for any problems.
+
+        Raises
+        ------
+        ArduinoException
+            Reading from the device failed.
         '''
 
         if channel not in self._state:
@@ -156,7 +159,14 @@ class ArduinoInterface(base_.BaseInterface):
             # raise InterfaceError('Could not read from serial device "%s", channel %d' % (self.device, channel))
 
     def _poll(self, channel, timeout=None, wait=None, suppress_longpress=True, **kwargs):
-        """ runs a loop, querying for pecks. returns peck time or "GoodNite" exception """
+        """ runs a loop, querying for pecks. returns peck time or None if polling times out
+        :param channel: the channel from which to read
+        :param timeout: the time, in seconds, until polling times out. Defaults to no timeout.
+        :param wait: the time, in seconds, between subsequent reads. Defaults to 0.
+        :param suppress_longpress: only return a successful read if the previous read was False. This can be helpful when using a button, where a press might trigger multiple times.
+
+        :return: timestamp of True read
+        """
 
         if timeout is not None:
             start = time.time()
@@ -209,6 +219,9 @@ class ArduinoInterface(base_.BaseInterface):
 
     @staticmethod
     def _make_arg(channel, value):
+        """ Turns a channel and boolean value into a 2 byte hex string to be fed to the arduino
+        :return: 2-byte hex string for input to arduino
+        """
 
         return "".join([chr(channel), chr(value)])
 
