@@ -1,5 +1,4 @@
 import logging
-import ipdb
 import numpy as np
 from pyoperant import EndSession, EndExperiment, ComponentError, InterfaceError, utils
 

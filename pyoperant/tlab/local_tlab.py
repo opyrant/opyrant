@@ -2,12 +2,29 @@ import datetime as dt
 import os
 import logging
 import argparse
+from functools import wraps
 
 from pyoperant import hwio, components, panels, utils, InterfaceError
 from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
 
 logger = logging.getLogger(__name__)
+
+def shutdown_on_error(func):
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except KeyboardInterrupt:
+            print("Shutting down")
+            self.sleep()
+        except:
+            self.sleep()
+            raise
+    return wrapper
+
+
 
 class TLabPanel(panels.BasePanel):
 
@@ -100,7 +117,7 @@ class TLabPanel(panels.BasePanel):
         self.house_light.off()
         self.feeder.down()
 
-
+    @shutdown_on_error
     def test(self):
         self.reset()
 
@@ -119,21 +136,20 @@ class TLabPanel(panels.BasePanel):
         self.reset()
         return True
 
+    @shutdown_on_error
     def calibrate(self):
 
         self.peck_port.off()
-        try:
-            while True:
-                is_pecked = self.peck_port.status()
-                if is_pecked:
-                    current_time = dt.datetime.now()
-                    print("%s: Pecked!" % current_time.strftime("%H:%M:%S"))
-                    self.peck_port.on()
-                utils.wait(0.05)
-                self.peck_port.off()
-        except KeyboardInterrupt:
-            print("Finished calibration")
+        while True:
+            is_pecked = self.peck_port.status()
+            if is_pecked:
+                current_time = dt.datetime.now()
+                print("%s: Pecked!" % current_time.strftime("%H:%M:%S"))
+                self.peck_port.on()
+            utils.wait(0.05)
+            self.peck_port.off()
 
+    @shutdown_on_error
     def check_poll_rate(self, iters=10, duration=10):
         import time
 
@@ -180,7 +196,6 @@ class TLabPanel(panels.BasePanel):
             self.feeder.feed(duration)
         except KeyboardInterrupt:
             self.feeder.down()
-
 
     def test_audio(self, filename="", repeat=False):
 

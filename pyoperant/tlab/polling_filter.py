@@ -1,6 +1,5 @@
 import logging
 import time
-import ipdb
 
 # TODO: Document. How do these filters work? What do they do?
 
@@ -42,4 +41,3 @@ class AudioPlaybackFilter(logging.Filter):
             return True
 
         return False
-
