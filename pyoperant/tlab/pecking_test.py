@@ -136,7 +136,7 @@ def run_pecking_test(args):
 
     print "Called run_pecking_test"
     box_name = "Box%d" % args.box
-    config_dir = os.path.expanduser(os.path.join("~", "Dropbox", "pecking_test", "configs"))
+    config_dir = os.path.expanduser("~/configs")
 
     # Load config file
     if args.config is not None:
