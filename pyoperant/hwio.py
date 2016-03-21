@@ -116,6 +116,9 @@ class AudioOutput(BaseIO):
         assert hasattr(self.interface,'_play_wav')
         assert hasattr(self.interface,'_stop_wav')
 
+        if hasattr(self.interface, '_config_audio'):
+            self.interface._config_audio(**params)
+
     def queue(self,wav_filename):
         return self.interface._queue_wav(wav_filename)
 
@@ -124,5 +127,3 @@ class AudioOutput(BaseIO):
 
     def stop(self):
         return self.interface._stop_wav()
-
-
