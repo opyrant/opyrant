@@ -79,3 +79,8 @@ class AudioInterface(BaseInterface):
 
         if self.wf is None:
             raise InterfaceError("wavefile is not open, but it should be")
+
+    def load_wav(self, filename):
+
+        wf = wave.open(filename, "r")
+        

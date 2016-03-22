@@ -144,6 +144,7 @@ class AudioOutput(BaseIO):
         assert hasattr(self.interface,'_queue_wav')
         assert hasattr(self.interface,'_play_wav')
         assert hasattr(self.interface,'_stop_wav')
+        self.config()
 
     def config(self):
 
