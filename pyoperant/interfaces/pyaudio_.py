@@ -55,12 +55,6 @@ class PyAudioInterface(base_.BaseInterface):
             self.wf = None
         self.pa.terminate()
 
-    def validate(self):
-        if self.wf is not None:
-            return True
-        else:
-            raise InterfaceError('there is something wrong with this wav file')
-
     def _get_stream(self,start=False):
         """
         """
@@ -96,19 +90,12 @@ class PyAudioInterface(base_.BaseInterface):
 
     def _stop_wav(self):
         try:
-            logger.debug("Attempting to close stream")
-            logger.debug("There are currently %d open streams" % len(self.pa._streams))
-            logger.debug("Stream activity: %s, %s" % (self.stream.is_active(), self.stream.is_stopped()))
-            # self.stream.stop_stream()
-            # logger.debug("Stream stopped")
-            # while self.stream.is_active():
-            #     logger.debug("Stream is still active!")
-            #     pass
+            logger.debug("Attempting to close pyaudio stream")
             self.stream.close()
             logger.debug("Stream closed")
         except AttributeError:
             self.stream = None
-        try:    
+        try:
             self.wf.close()
         except AttributeError:
             self.wf = None
