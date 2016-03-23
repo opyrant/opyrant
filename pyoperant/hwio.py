@@ -118,6 +118,17 @@ class BooleanOutput(BaseIO):
         value = not self.read()
         return self.write(value=value)
 
+
+class AnalogInput(BaseIO):
+
+    pass
+
+
+class AnalogOutput(BaseIO):
+
+    pass
+
+
 class AudioOutput(BaseIO):
     """Class which holds information about audio outputs and abstracts the
     methods of writing to them
