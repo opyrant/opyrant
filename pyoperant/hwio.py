@@ -159,8 +159,8 @@ class AudioOutput(BaseIO):
 
     def config(self):
 
-        if hasattr(self.interface, '_config_write'):
-            self.interface._config_write(**self.params)
+        if hasattr(self.interface, '_config_write_analog'):
+            self.interface._config_write_analog(**self.params)
 
     def queue(self,wav_filename):
         return self.interface._queue_wav(wav_filename)

@@ -1,6 +1,7 @@
 import time
 import datetime
 import logging
+from pyoperant import InterfaceError
 
 logger = logging.getLogger(__name__)
 
@@ -83,4 +84,3 @@ class AudioInterface(BaseInterface):
     def load_wav(self, filename):
 
         wf = wave.open(filename, "r")
-        

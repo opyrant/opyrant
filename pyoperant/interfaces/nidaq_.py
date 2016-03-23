@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import nidaqmx
-from scipy.io import wavfile # TODO: switch to built-in wave
+import wave
 from pyoperant.interfaces import base_
 from pyoperant import utils, InterfaceError
 
@@ -16,7 +16,8 @@ def list_devices():
 class NIDAQmxError(Exception):
     pass
 
-class NIDAQmxDigitalInterface(base_.BaseInterface):
+
+class NIDAQmxInterface(base_.BaseInterface):
     """
     Creates an interface for boolean inputs and outputs to a NIDAQ card using
     the pylibnidaqmx library: https://github.com/imrehg/pylibnidaqmx
@@ -35,101 +36,6 @@ class NIDAQmxDigitalInterface(base_.BaseInterface):
     dev._config_read("Dev1/port0/line1")
     # Read from that input
     dev._read_bool("Dev1/port0/line1")
-    """
-
-    def __init__(self, device_name="Dev1", samplerate=30000, clock_channel=None,
-                 *args, **kwargs):
-        """
-        Creates an interface for boolean inputs and outputs to a NIDAQ card
-        :param device_name: the name of the device on your system
-        :param samplerate: the samplerate for all inputs and outputs.
-        If an external clock is specified, then this should be the maximum
-        allowed samplerate.
-        :param clock_channel: the channel name for an external clock signal
-        """
-        super(NIDAQmxDigitalInterface, self).__init__(*args, **kwargs)
-        self.device_name = device_name
-        self.samplerate = samplerate
-        self.clock_channel = clock_channel
-
-        self.tasks = dict()
-        self.open()
-
-    def open(self):
-        """ Opens the nidaqmx device """
-
-        logger.debug("Opening nidaqmx device named %s" % self.device_name)
-        self.device = nidaqmx.Device(self.device_name)
-
-    def close(self):
-        """ Closes the nidaqmx device and deletes all of the tasks """
-
-        logger.debug("Closing nidaqmx device named %s" % self.device_name)
-        for task in self.tasks.values():
-            logger.debug("Deleting task named %s" % str(task.name))
-            task.stop()
-            task.clear()
-            del task
-        self.tasks = dict()
-
-    def _config_read(self, channels):
-        """
-        Configure a channel or group of channels as a boolean input
-        :param channels: a channel or group of channels that will all be read
-        from at the same time
-        """
-
-        # TODO: test multiple channels. What format should channels be in?
-        logger.debug("Configuring digital input on channel(s) %s" % str(channels))
-        task = nidaqmx.DigitalInputTask()
-        task.create_channel(channels)
-        task.configure_timing_sample_clock(source=selsf.clock_channel,
-                                           rate=self.samplerate)
-        # TODO: Here we don't set buffer size to 0. Why not?
-        self.tasks[channels] = task
-
-    def _config_write(self, channels):
-        """
-        Configure a channel or group of channels as a boolean output
-        :param channels: a channel or group of channels that will all be written
-        to at the same time
-        """
-
-        # TODO: test multiple channels. What format should channels be in?
-        logger.debug("Configuring digital output on channel(s) %s" % str(channels))
-        task = nidaqmx.DigitalOutputTask()
-        task.create_channel(channels)
-        task.configure_timing_sample_clock(source=self.clock_channel,
-                                           rate=self.samplerate)
-        # TODO: This locks the buffer to the hardware clock. Do we want this in case of sending multiple bits?
-        task.set_buffer_size(0)
-        self.tasks[channels] = task
-
-    def _read_bool(self, channels):
-
-        if channels not in self.tasks:
-            raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
-
-        task = self.tasks[channels]
-        task.read()
-
-    def _write_bool(self, channels, value):
-
-        if channels not in self.tasks:
-            raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
-        task = self.tasks[channels]
-        task.write(value, auto_start=True)
-
-
-class NIDAQmxAnalogInterface(base_.BaseInterface):
-    """
-    Creates an interface for analog inputs and outputs to a NIDAQ card using
-    the pylibnidaqmx library: https://github.com/imrehg/pylibnidaqmx
-
-    Examples:
-    dev = NIDAQmxAnalogInterface("Dev1") # open the device at "Dev1"
-    # or with an external clock
-    dev = NIDAQmxAnalogInterface("Dev1", clock_channel="/Dev1/PFI0")
 
     # Configure an analog output on channel ao0
     dev._config_write("Dev1/ao0")
@@ -143,7 +49,7 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
     """
 
     def __init__(self, device_name="Dev1", samplerate=30000, clock_channel=None,
-                 chunk_size=256, *args, **kwargs):
+                 *args, **kwargs):
         """
         Creates an interface for boolean inputs and outputs to a NIDAQ card
         :param device_name: the name of the device on your system
@@ -152,7 +58,7 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
         allowed samplerate.
         :param clock_channel: the channel name for an external clock signal
         """
-        super(NIDAQmxAnalogInterface, self).__init__(*args, **kwargs)
+        super(NIDAQmxInterface, self).__init__(*args, **kwargs)
         self.device_name = device_name
         self.samplerate = samplerate
         self.clock_channel = clock_channel
@@ -177,7 +83,55 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
             del task
         self.tasks = dict()
 
-    def _config_read(self, channels):
+    def _config_read(self, channels, **kwargs):
+        """
+        Configure a channel or group of channels as a boolean input
+        :param channels: a channel or group of channels that will all be read
+        from at the same time
+        """
+
+        # TODO: test multiple channels. What format should channels be in?
+        logger.debug("Configuring digital input on channel(s) %s" % str(channels))
+        task = nidaqmx.DigitalInputTask()
+        task.create_channel(channels)
+        task.configure_timing_sample_clock(source=selsf.clock_channel,
+                                           rate=self.samplerate)
+        task.set_buffer_size(0)
+        self.tasks[channels] = task
+
+    def _config_write(self, channels, **kwargs):
+        """
+        Configure a channel or group of channels as a boolean output
+        :param channels: a channel or group of channels that will all be written
+        to at the same time
+        """
+
+        # TODO: test multiple channels. What format should channels be in?
+        logger.debug("Configuring digital output on channel(s) %s" % str(channels))
+        task = nidaqmx.DigitalOutputTask()
+        task.create_channel(channels)
+        task.configure_timing_sample_clock(source=self.clock_channel,
+                                           rate=self.samplerate)
+        task.set_buffer_size(0)
+        self.tasks[channels] = task
+
+    def _read_bool(self, channels, **kwargs):
+
+        if channels not in self.tasks:
+            raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
+
+        task = self.tasks[channels]
+        task.read()
+
+    def _write_bool(self, channels, value, **kwargs):
+
+        if channels not in self.tasks:
+            raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
+        task = self.tasks[channels]
+        task.write(value, auto_start=True)
+
+    def _config_read_analog(self, channels, min_val=-10.0, max_val=10.0,
+                            **kwargs):
         """
         Configure a channel or group of channels as a boolean input
         :param channels: a channel or group of channels that will all be read
@@ -187,12 +141,14 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
         # TODO: test multiple channels. What format should channels be in?
         logger.debug("Configuring analog input on channel(s) %s" % str(channels))
         task = nidaqmx.AnalogInputTask()
-        task.create_channel(channels)
+        task.create_voltage_channel(channels, min_val=min_val, max_val=max_val)
         task.configure_timing_sample_clock(source=selsf.clock_channel,
-                                           rate=self.samplerate)
+                                           rate=self.samplerate,
+                                           sample_mode="finite")
         self.tasks[channels] = task
 
-    def _config_write(self, channels):
+    def _config_write_analog(self, channels, min_val=-10.0, max_val=10.0,
+                             **kwargs):
         """
         Configure a channel or group of channels as a boolean output
         :param channels: a channel or group of channels that will all be written
@@ -202,12 +158,13 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
         # TODO: test multiple channels. What format should channels be in?
         logger.debug("Configuring analog output on channel(s) %s" % str(channels))
         task = nidaqmx.AnalogOutputTask()
-        task.create_channel(channels)
+        task.create_voltage_channel(channels, min_val=min_val, max_val=max_val)
         task.configure_timing_sample_clock(source=self.clock_channel,
-                                           rate=self.samplerate)
+                                           rate=self.samplerate,
+                                           sample_mode="finite")
         self.tasks[channels] = task
 
-    def _read(self, channels, nsamples, **kwargs):
+    def _read_analog(self, channels, nsamples, **kwargs):
         """
         Read from a channel or group of channels for the specified number of
         samples.
@@ -222,9 +179,11 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
             raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
 
         task = self.tasks[channels]
-        task.read()
+        task.set_buffer_size(nsamples)
 
-    def _write(self, channels, values):
+        return task.read(nsamples)
+
+    def _write_analog(self, channels, values, is_blocking=False, **kwargs):
         """
         Write a numpy array of float64 values to the buffer on a channel or
         group of channels
@@ -237,70 +196,74 @@ class NIDAQmxAnalogInterface(base_.BaseInterface):
             raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
 
         task = self.tasks[channel]
-        task.write(value, auto_start=True)
+        task.stop()
+        task.set_buffer_size(len(values))
+        task.write(values, auto_start=False)
+        task.start()
+        if is_blocking:
+            task.wait_until_done()
+            task.stop()
 
 
-class NIDAQmxAudioInterface(base_.AudioInterface):
+class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
 
     def __init__(self, device_name="Dev1", samplerate=30000.0, clock_channel=None,
                  *args, **kwargs):
 
-        super(NIDAQmxAudioInterface, self).__init__(*args, **kwargs)
-        self.device_name = device_name
-        self.samplerate = samplerate
-        self.clock_channel = clock_channel
+        super(NIDAQmxAudioInterface, self).__init__(device_name=device_name,
+                                                    samplerate=samplerate,
+                                                    clock_channel=clock_channel,
+                                                    *args, **kwargs)
         self.stream = None
+        self.wf = None
+        self.wav_data = None
 
-        self.open()
+    def _config_write_analog(self, channel, min_val=-10.0, max_val=10.0,
+                             **kwargs):
 
-    def open(self):
-        """ Opens the nidaqmx device """
+        super(NIDAQmxAudioInterface, self)._config_write_analog(channel,
+                                                                min_val=min_val,
+                                                                max_val=max_val,
+                                                                **kwargs)
+        self.stream = self.tasks.values()[0]
 
-        logger.debug("Opening nidaqmx device named %s" % self.device_name)
-        self.device = nidaqmx.Device(self.device_name)
+    def _queue_wav(self, wav_file, start=False, **kwargs):
 
-    def close(self):
-        """ Closes the nidaqmx device and deletes the audio task """
+        if self.wf is not None:
+            self._stop_wav()
 
-        logger.debug("Closing nidaqmx device named %s" % self.device_name)
-        logger.debug("Deleting task named %s" % str(self.stream.name))
-        self.stream.stop()
-        self.stream.clear()
-        del self.stream
-        self.stream = None
-
-    def _config_write(self, channel, name=None,
-                      min_val=-10.0, max_val=10.0, **kwargs):
-
-        logger.debug("Configuring audio output on channel %s" % str(channel))
-        task = nidaqmx.AnalogOutputTask()
-        # TODO: what should we do about max_val and min_val?
-        task.create_voltage_channel(channel, min_val=min_val, max_val=max_val)
-        # TODO: It seems the sample_clock has to be set to the number of samples of the wavefile
-        task.configure_timing_sample_clock(source=self.clock_channel,
-                                           rate=self.samplerate)
-        self.stream = task
-
-    def _queue_wav(self, wav_file, start=False):
         logger.debug("Queueing wavfile %s" % wav_file)
-        self.data = self.load_wav(wav_file)
+        self.wf = wave.open(wav_file)
         self.validate()
-        self._get_stream(start=start)
+        sampwidth = self.wf.getsampwidth()
+        if sampwidth == 2:
+            max_val = 32768.0
+            dtype = np.int16
+        elif sampwidth == 4:
+            max_val = float(2 ** 32)
+            dtype = np.int32
+        data = np.fromstring(self.wf.readframes(-1), dtype=dtype)
+        self.wav_data = (data / max_val).astype(np.float64)
+        self._get_stream(start=start, **kwargs)
 
-    def _get_stream(self, start=False):
+    def _get_stream(self, start=False, **kwargs):
         """
         """
 
         self.stream.configure_timing_sample_clock(source=self.clock_channel,
                                                   rate=self.samplerate,
                                                   sample_mode="finite",
-                                                  samples_per_channel=len(self.wf))
-        self.stream.write(self.wf, auto_start=start)
+                                                  samples_per_channel=len(self.wav_data))
+        self.stream.write(self.wav_data, auto_start=False)
+        if start:
+            self._play_wav(**kwargs)
 
-    def _play_wav(self):
+    def _play_wav(self, is_blocking=False):
         logger.debug("Playing wavfile")
         # self.event.write()
         self.stream.start()
+        if is_blocking:
+            self.wait_until_done()
 
     def _stop_wav(self):
         try:
@@ -309,7 +272,10 @@ class NIDAQmxAudioInterface(base_.AudioInterface):
             logger.debug("Stream closed")
         except AttributeError:
             self.stream = None
+
         try:
             self.wf.close()
         except AttributeError:
             self.wf = None
+
+        self.wav_data = None
