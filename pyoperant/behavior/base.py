@@ -3,7 +3,7 @@ import os, sys, socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure
 from pyoperant import ComponentError, InterfaceError, EndExperiment
-from pyoperant import states, trials, subjects
+from pyoperant import states, trials, subjects, blocks
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +217,12 @@ class BaseExp(object):
         self.panel.sleep()
         raise EndExperiment
 
+    def shape(self):
+        """
+        This will house a method to run shaping.
+        """
+
+        pass
 
     # State and trial logic. It might be good to have these methods do some common sense functions / logging
     def run(self):
@@ -245,15 +251,42 @@ class BaseExp(object):
                                  error_state='idle',
                                  **self.STATE_DICT)
 
-    # session
+    ## Session Flow
     def session_pre(self):
-        pass
+        """ Runs before the session starts
+        """
+        logger.debug("Beginning session")
+        self.session_id += 1
+        self.session_start_time = dt.datetime.now()
+        self.panel.ready()
 
     def session_main(self):
-        pass
+        """ Runs the sessions
+        """
+
+        queue = self.parameters["block_queue"]
+        queue_parameters = self.parameters["block_queue_parameters"]
+        weights = self.parameters["block_weights"]
+        for self.this_block in blocks.BlockHandler(blocks=self.blocks,
+                                                   weights=weights,
+                                                   queue=queue,
+                                                   queue_parameters=queue_parameters):
+            logger.info("Beginning block #%d" % self.this_block.index)
+            for trial in trials.TrialHandler(self.this_block):
+                trial.run()
 
     def session_post(self):
-        pass
+        """ Closes out the sessions
+        """
+
+        self.panel.idle()
+        self.session_end_time = dt.datetime.now()
+        logger.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
+        if self.session_id < self.parameters.get("num_sessions", 1):
+            self.schedule_next_session()
+        else:
+            logger.info("Finished all sessions.")
+            self.end()
 
     # Defining the different trial states. If any of these are not needed by the behavior, just don't define them in your subclass
     def trial_pre(self):

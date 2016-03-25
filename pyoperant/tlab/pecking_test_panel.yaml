@@ -1,0 +1,11 @@
+---
+name: Box5
+arduino:
+  path: "/dev/ttyArduino_box6"
+  channels:
+    key_input: 4
+    key_light: 8
+    main_light: 9
+    feeder: 10
+speaker: "speaker0"
+...

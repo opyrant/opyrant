@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 import os
 import sys
 import logging
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 # TODO: Document classes and experiment methods
 # TODO: What do the classes override? What do they inherit and why?
-# TODO: Shouldn't /usr/local/bin/python be /usr/bin/env python?
 
 class RewardedCondition(stimuli.StimulusConditionWav):
 
@@ -93,39 +92,8 @@ class GoNoGoInterrupt(base.BaseExp):
                                'max_wait',
                                ]
         self.subject.create_datastore()
-        self.session_id = 0
-
-    def shape(self):
-        """
-        This will house a method to run shaping.
-        """
-
-        pass
-
-    ## Session Flow
-    def session_pre(self):
-        """ Runs before the session starts
-        """
-        logger.debug("Beginning session")
-        self.session_id += 1
-        self.session_start_time = dt.datetime.now()
         self.start_immediately = False
-        self.panel.ready()
-
-    def session_main(self):
-        """ Runs the sessions
-        """
-
-        queue = self.parameters["block_queue"]
-        queue_parameters = self.parameters["block_queue_parameters"]
-        weights = self.parameters["block_weights"]
-        for self.this_block in blocks.BlockHandler(blocks=self.blocks,
-                                                   weights=weights,
-                                                   queue=queue,
-                                                   queue_parameters=queue_parameters):
-            logger.info("Beginning block #%d" % self.this_block.index)
-            for trial in trials.TrialHandler(self.this_block):
-                trial.run()
+        self.session_id = 0
 
     def trial_pre(self):
         ''' this is where we initialize a trial'''
@@ -211,20 +179,6 @@ class GoNoGoInterrupt(base.BaseExp):
         if self.check_session_schedule() == False:
             logger.debug("Session has run long enough. Ending")
             raise EndSession
-
-    def session_post(self):
-        """ Closes out the sessions
-        """
-
-        self.panel.idle()
-        self.session_end_time = dt.datetime.now()
-        logger.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
-        if self.session_id < self.parameters.get("num_sessions", 1):
-            self.schedule_next_session()
-        else:
-            logger.info("Finished all sessions.")
-            self.end()
-
 
 if __name__ == "__main__":
 
