@@ -45,7 +45,6 @@ class BooleanInput(BaseIO):
         in params
         """
 
-        # This should be handled by the assert statement, right?
         try:
             return self.interface._config_read(**self.params)
         except AttributeError:

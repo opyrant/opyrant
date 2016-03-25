@@ -11,6 +11,7 @@ class BaseInterface(object):
     Implemented methods:
     - _poll
     """
+
     def __init__(self, *args, **kwargs):
 
         super(BaseInterface, self).__init__()
@@ -54,6 +55,37 @@ class BaseInterface(object):
     def __del__(self):
         self.close()
 
+    @property
+    def can_read_bool(self):
+        """
+        If the interface is capable of reading boolean values from the device
+        """
+
+        return hasattr(self, "read_bool")
+
+    @property
+    def can_write_bool(self):
+        """
+        If the interface is capable of writing boolean values to the device
+        """
+
+        return hasattr(self, "write_bool")
+
+    @property
+    def can_read_analog(self):
+        """
+        If the interface is capable of reading analog values from the device
+        """
+
+        return hasattr(self, "read_analog")
+
+    @property
+    def can_write_analog(self):
+        """
+        If the interface is capable of writing analog values from the device
+        """
+
+        return hasattr(self, "write_analog")
 
 class AudioInterface(BaseInterface):
     """
