@@ -531,17 +531,17 @@ class Speaker(BaseComponent):
     def queue(self, wav_filename, metadata=None):
 
         self.event["metadata"] = metadata
-        pass
+        return self.output.queue(wav_filename)
 
     def play(self):
 
         self.event["action"] = "play"
-        pass
+        return self.output.play(event=self.event)
 
     def stop(self):
 
         self.event["action"] = "stop"
-        pass
+        return self.output.stop(event=self.event)
 
 
 class Microphone(BaseComponent):
@@ -563,16 +563,22 @@ class Microphone(BaseComponent):
         super(Speaker, self).__init__(*args, **kwargs)
         self.input = input_
 
-    def record(self):
+    def record(self, nsamples):
+        """ Reads from input for a set number of samples
 
+        Parameters
+        ----------
+        nsamples: int
+            Number of samples to read from input
+
+        Returns
+        -------
+        numpy array
+            The analog signal recorded by input
+        """
+        # TODO: This should use a stop signal too, I think
         self.event["action"] = "rec"
-        pass
-
-    def stop(self):
-
-        self.event["action"] = "stop"
-        pass
-
+        return self.input.read(nsamples, event=self.event)
 
 # ## Perch ##
 

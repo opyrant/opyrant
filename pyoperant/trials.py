@@ -3,21 +3,47 @@ from pyoperant import queues, utils
 
 logger = logging.getLogger(__name__)
 
-class Trial(utils.Event):
-    """docstring for Trial"""
+
+class Trial(object):
+    """ Class that implements all basic functionality of a trial
+
+    Parameters
+    ----------
+    index: int
+        Index of the trial
+    experiment: instance of Experiment class
+        The experiment of which this trial is a part
+    condition: instance of StimulusCondition
+        The condition for the current trial. Provides the trial with a stimulus,
+        as well as reinforcement instructions
+
+    Attributes
+    ----------
+    index: int
+        Index of the trial
+    experiment: instance of Experiment class
+        The experiment of which this trial is a part
+    stimulus_condition: instance of StimulusCondition
+        The condition for the current trial. Provides the trial with a stimulus,
+        as well as reinforcement instructions
+
+    Methods
+    -------
+    run()
+        Runs the trial
+    """
     def __init__(self,
                  index=None,
                  experiment=None,
-                 stimulus_condition=None,
+                 condition=None,
                  *args, **kwargs):
 
         super(Trial, self).__init__(*args, **kwargs)
-        self.label = 'trial'
         self.index = index
 
         # Object references
         self.experiment = experiment
-        self.condition = stimulus_condition
+        self.condition = condition
 
         # Trial statistics
         self.stimulus = None
@@ -28,19 +54,22 @@ class Trial(utils.Event):
         self.punish = False
 
     def run(self):
-        """
-        This is where the basic trial structure is encoded. The main structure
-        is as follows: Get stimulus -> Initiate trial -> Play stimulus ->
-        Receive response ->  Consequate response -> Finish trial -> Save data.
+        """ Runs the trial
+
+        Summary
+        -------
+        The main structure is as follows:
+
+        Get stimulus -> Initiate trial -> Play stimulus -> Receive response ->
+        Consequate response -> Finish trial -> Save data.
+
         The stimulus, response and consequate stages are broken into pre, main,
-        and post stages. This seems a bit too subdivided, and it may be, but a
-        pre and post stage allow for a clean place to put delays between stages.
+        and post stages. Only use the stages you need in your experiment.
         """
 
         self.experiment.this_trial = self
 
         # Get the stimulus
-        # Currently this doesn't allow for any keyword arguments (e.g. replacement, shuffle)
         self.stimulus = self.condition.get()
 
         # Any pre-trial logging / computations
@@ -65,10 +94,37 @@ class Trial(utils.Event):
         self.experiment.trial_post()
 
         # Store trial data
-        self.experiment.subject.store_data()
+        self.experiment.subject.store_data(self)
 
 
 class TrialHandler(queues.BaseHandler):
+    """ Provides an iterator for looping through trials according to a given
+    queue.
+
+    Parameters
+    ----------
+    block: instance of the Block class
+        The block in which these trials will be run. Defines a list of
+        conditions, a queue, and a list of weights for each condition.
+
+    Attributes
+    ----------
+    block: instance of the Block class
+        The block in which these trials will be run. Defines a list of
+        conditions, a queue, and a list of weights for each condition.
+    trial_index: int
+        The index of the current trial
+    queue: instance of a queue
+        The instance of a queue initialized from the data in block
+
+    Example
+    -------
+    # Initialize a TrialHandler
+    trials = TrialHandler(block)
+    # Loop through the trials and run each one
+    for trial in trials:
+        trial.run()
+    """
 
     def __init__(self, block):
 
@@ -81,9 +137,11 @@ class TrialHandler(queues.BaseHandler):
 
     def __iter__(self):
 
+        # Loop through the queue iterator
         for condition in self.queue:
+            # Create a trial instance
             self.trial_index += 1
             trial = Trial(index=self.trial_index,
                           experiment=self.block.experiment,
-                          stimulus_condition=condition)
+                          condition=condition)
             yield trial

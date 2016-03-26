@@ -1,12 +1,19 @@
 import logging
 import numpy as np
-from pyoperant import EndSession, EndExperiment, ComponentError, InterfaceError, utils
+from pyoperant import (EndSession,
+                       EndExperiment,
+                       ComponentError,
+                       InterfaceError,
+                       utils)
 
 logger = logging.getLogger(__name__)
+
+
 def log_error_callback(err):
 
     if isinstance(err, (InterfaceError, ComponentError)):
         logger.critical(repr(err))
+
 
 def run_state_machine(experiment, start_in='pre', error_state=None, error_callback=None, **states):
     """runs a state machine defined by the keyword arguments
