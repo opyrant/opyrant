@@ -107,15 +107,18 @@ class BooleanOutput(BaseIO):
             logger.debug("Current value set as %s" % value)
             return self.last_value
 
-    def write(self,value=False):
+    def write(self, value=False, event=None):
         """write status"""
         logger.debug("Setting value to %s" % value)
-        self.last_value = self.interface._write_bool(value=value,**self.params)
+        self.last_value = self.interface._write_bool(value=value,
+                                                     event=event,
+                                                     **self.params)
         return self.last_value
 
-    def toggle(self):
+    def toggle(self, event=None):
+        # TODO: what will event be here?
         value = not self.read()
-        return self.write(value=value)
+        return self.write(value=value, event=event)
 
 
 class AnalogInput(BaseIO):
@@ -161,11 +164,11 @@ class AudioOutput(BaseIO):
         if hasattr(self.interface, '_config_write_analog'):
             self.interface._config_write_analog(**self.params)
 
-    def queue(self,wav_filename):
+    def queue(self, wav_filename):
         return self.interface._queue_wav(wav_filename)
 
-    def play(self):
-        return self.interface._play_wav()
+    def play(self, event=None):
+        return self.interface._play_wav(event=event)
 
-    def stop(self):
-        return self.interface._stop_wav()
+    def stop(self, event=None):
+        return self.interface._stop_wav(event=event)
