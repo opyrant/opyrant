@@ -51,6 +51,36 @@ class AuditoryStimulus(Stimulus):
 
 
 class StimulusCondition(object):
+    """ Class to represent a single stimulus condition for an operant
+    conditioning experiment.
+
+    Parameters
+    ----------
+    name: string
+        Name of the stimulus condition used in data storage
+    response: string, int, or bool
+        The value of the desired response. Used to determine if the subject's
+        response was correct. (e.g. "left", True)
+    is_rewarded: bool
+        Whether or not a correct response should be rewarded
+    is_punished: bool
+        Whether or not an incorrect response should be punished
+    file_path: string
+        Path to directory where stimuli are stored
+    recursive: bool
+        Whether or not to search file_path recursively
+    file_pattern: string
+        A glob pattern to filter files by
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+
+    Examples
+    --------
+    """
 
     def __init__(self, name="", response=None, is_rewarded=False, is_punished=False,
                  file_path="", recursive=False, file_pattern="*"):
