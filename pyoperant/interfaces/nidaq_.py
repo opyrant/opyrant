@@ -119,10 +119,8 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         if channels not in self.tasks:
             raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
-        task = self.tasks[channels]
-        if isinstance(task, nidaqmx.DigitalOutputTask):
-            raise WriteCannotBeReadError("Cannot read from output task")
 
+        task = self.tasks[channels]
         task.read()
 
     def _write_bool(self, channels, value, **kwargs):
@@ -181,9 +179,6 @@ class NIDAQmxInterface(base_.BaseInterface):
             raise NIDAQmxError("Channel(s) %s not yet configured" % str(channels))
 
         task = self.tasks[channels]
-        if isinstance(task, nidaqmx.AnalogOutputTask):
-            raise WriteCannotBeReadError("Cannot read from output task")
-
         task.set_buffer_size(nsamples)
 
         return task.read(nsamples)
@@ -281,6 +276,6 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         try:
             self.wf.close()
         except AttributeError:
-            self.wf = None
+             self.wf = None
 
         self.wav_data = None

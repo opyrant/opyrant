@@ -34,6 +34,7 @@ class BaseIO(object):
     def __init__(self, name=None, interface=None, params={},
                  *args, **kwargs):
 
+        super(BaseIO, self).__init__(self, *args, **kwargs)
         self.name = name
         self.interface = interface
         self.params = params

@@ -1,9 +1,10 @@
 import threading
-# import Queue
-from multiprocessing import Process, Queue
+import Queue
+# from multiprocessing import Process, Queue
 import time
 import logging
 import numpy as np
+from pyoperant import hwio
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class Events(object):
 
         event["time"] = time.time()
         for handler in self.handlers:
-            # print("Adding to handler %s" % str(handler))
+            print("Adding to handler %s" % str(handler))
             handler.queue.put(event)
 
 
@@ -32,21 +33,27 @@ class EventHandler(object):
 
     STOP_FLAG = 0
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+
+        super(EventHandler, self).__init__(*args, **kwargs)
 
         # Initialize the queue
-        # self.queue = Queue.Queue(maxsize=0)
-        self.queue = Queue(maxsize=0)
-        self.delay_queue = Queue(maxsize=0)
+        self.queue = Queue.Queue(maxsize=0)
+        #self.queue = Queue(maxsize=0)
+        self.delay_queue = Queue.Queue(maxsize=0)
 
         # Initialize the thread
-        # self.thread = threading.Thread(target=self.run, name=self.__class__.__name__)
-        self.thread = Process(target=self.run, name=self.__class__.__name__)
+        self.thread = threading.Thread(target=self.run, name=self.__class__.__name__)
+        # self.thread = Process(target=self.run, name=self.__class__.__name__)
 
         # Run the thread
         self.thread.start()
 
         self.delays = list()
+
+    def filter(self, event):
+
+        return True
 
     def run(self):
 
@@ -55,8 +62,8 @@ class EventHandler(object):
             if event is self.STOP_FLAG:
                 logger.debug("Stopping thread %s" % self.thread.name)
                 return
-
-            self.write(event)
+            if not self.filter(event):
+                self.write(event)
 
     def close(self):
 
@@ -67,20 +74,29 @@ class EventHandler(object):
         self.close()
 
 
-class EventInterfaceHandler(EventHandler):
+class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
 
-    def __init__(self, interface, name_bytes=4, action_bytes=4,
-                 metadata_bytes=16):
+    def __init__(self, interface, params={}, name_bytes=4, action_bytes=4,
+                 metadata_bytes=16, component=None):
 
-        super(EventInterfaceHandler, self).__init__()
-        self.interface = interface
         self.name_bytes = name_bytes
         self.action_bytes = action_bytes
         self.metadata_bytes = metadata_bytes
+        self.component = component
         self.map_to_bit = dict()
+        super(EventInterfaceHandler, self).__init__(interface=interface,
+                                                    params=params)
+
+    def filter(self, event):
+
+        if self.component is None:
+            return True
+
+        return self.event["name"] == self.component
 
     def write(self, event):
 
+        print("Writing to interface")
         if "time" in event:
             delay = time.time() - event["time"]
             print("Took %.4f seconds to write to interface handler" % delay)
@@ -92,7 +108,7 @@ class EventInterfaceHandler(EventHandler):
             bits = self.map_to_bit[key]
         except KeyError:
             bits = self.to_bit_sequence(event)
-        self.interface.write(bits)
+        self.interface._write_bool(value=bits, **self.params)
 
     def to_bit_sequence(self, event):
 
@@ -122,21 +138,25 @@ class EventInterfaceHandler(EventHandler):
 
         return sequence
 
+    def toggle(self):
+        pass
+
 
 class EventLogHandler(EventHandler):
 
     def __init__(self, filename, format=None):
 
-        super(EventLogHandler, self).__init__()
         self.filename = filename
         if format is None:
             self.format = "\t".join(["{time}",
                                      "{name}",
                                      "{action}",
                                      "{metadata}"])
+        super(EventLogHandler, self).__init__()
 
     def write(self, event):
 
+        print("Writing to log file")
         if "time" in event:
             delay = time.time() - event["time"]
             print("Took %.4f seconds to write to log handler" % delay)

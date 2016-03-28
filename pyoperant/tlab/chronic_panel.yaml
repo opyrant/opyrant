@@ -1,0 +1,9 @@
+---
+name: 131
+nidaq:
+  path: "Dev1"
+  channels:
+    speaker: "ao0"
+    microphone: "ai0"
+    stimulus: 
+...
