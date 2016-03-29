@@ -362,8 +362,9 @@ class BaseHandler(object):
     Parameters
     ----------
     queue: queue function or class
-        The queue that will be iterated over. All queues must implement a
-        generator, either through yielding values or a Class.next() method.
+        The queue that will be iterated over. All queues must accept an items
+        argument and implement generator, either through yielding values or a
+        Class.next() method.
     items: list
         A list of items to iterate over.
     Additional key-value pairs are used to initialize the queue

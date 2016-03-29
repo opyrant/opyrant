@@ -1,8 +1,6 @@
 import os
-from functools import wraps
 
 # TODO: Do we use functools here?
-# TODO: What is ConfigurableYAML?
 # TODO: What is the best way to import within classes
 
 class Configure(object):
@@ -96,11 +94,12 @@ class ConfigureYAML(Configure):
         Save a dictionary of parameters to an experiment YAML config file
         :param parameters: dictionary of experiment parameters
         :param filename: path to output file
-        :param overwrite: whether or not to overwrite if the output file already exists
+        :param overwrite: whether or not to overwrite if the output file
+        already exists
         """
         import yaml
 
-        if os.path.exists(filename) and (overwrite == False):
+        if os.path.exists(filename) and (overwrite is False):
             raise IOError("File %s already exists! To overwrite, set overwrite=True" % filename)
 
         with open(filename, "w") as yaml_file:
@@ -110,10 +109,10 @@ class ConfigureYAML(Configure):
                       explicit_end=True)
 
 
-## What is this??
-class ConfigurableYAML(type):
-
-    def __new__(cls, *args, **kwargs):
-
-        ConfigureYAML.constructors.append(cls)
-        return super(ConfigureableYAML, cls, *args, **kwargs)
+# ## What is this??
+# class ConfigurableYAML(type):
+#
+#     def __new__(cls, *args, **kwargs):
+#
+#         ConfigureYAML.constructors.append(cls)
+#         return super(ConfigureableYAML, cls, *args, **kwargs)

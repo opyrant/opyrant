@@ -43,26 +43,39 @@ class BasePanel(object):
         self.outputs = []
 
     def reset(self):
+        """
+        Turn everything off (sleep), then ready
+        """
         # Should log that nothing is being reset and move on
-        
-        pass
+
+        self.sleep()
+        return self.ready()
 
     def ready(self):
 
-        pass
+        return True
 
     def reward(self):
 
         pass
 
     def sleep(self):
+        """
+        Turn all boolean outputs off
+        """
+        for output in self.outputs:
+            if isinstance(output, hwio.BooleanOutput):
+                self.output.write(False)
 
-        pass
+        return True
 
     def idle(self):
 
-        pass
+        return True
 
     def wake(self):
+        """
+        Ready the panel
+        """
 
-        pass
+        return self.ready()

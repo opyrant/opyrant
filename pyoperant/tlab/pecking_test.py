@@ -10,18 +10,27 @@ from pyoperant.tlab import local_tlab
 
 logger = logging.getLogger(__name__)
 
-# TODO: Clean up method to run pecking test. Which file should be run???
-# TODO: Document methods and classes
 
-class ProbeCondition(stimuli.NonrandomStimulusConditionWav):
+class ProbeCondition(stimuli.StimulusConditionWav):
+    """ Probe stimuli are not consequated and should be sampled as evenly as
+    possible. This is done by setting replacement to False and shuffle to True.
+    """
 
-    def __init__(self, file_path="", recursive=False):
+    def __init__(self, name="Probe",
+                 response=False,
+                 is_rewarded=False,
+                 is_punished=False,
+                 replacement=False,
+                 shuffle=True,
+                 *args, **kwargs):
 
-        super(ProbeCondition, self).__init__(name="Probe",
-                                             response=False,
-                                             is_rewarded=False,
-                                             file_path=file_path,
-                                             recursive=recursive)
+        super(ProbeCondition, self).__init__(name=name,
+                                             response=response,
+                                             is_rewarded=is_rewarded,
+                                             is_punished=is_punished,
+                                             replacement=replacement,
+                                             shuffle=shuffle,
+                                             *args, **kwargs)
 
 class PeckingTest(GoNoGoInterrupt):
     # Additional configurations:

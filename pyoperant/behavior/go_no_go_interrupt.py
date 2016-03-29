@@ -148,21 +148,7 @@ class GoNoGoInterrupt(base.BaseExp):
             self.start_immediately = True # Next trial will begin immediately
             self.this_trial.rt = self.this_trial.response_time - self.this_trial.time
 
-    def consequate_main(self):
-
-        # This is maybe a bit overly done
-        if self.this_trial.response == self.this_trial.condition.response:
-            self.this_trial.correct = True
-            if self.this_trial.condition.is_rewarded:
-                if self.this_block.reinforcement.consequate(self.this_trial):
-                    self.reward()
-        else:
-            self.this_trial.correct = False
-            if self.this_trial.condition.is_punished:
-                if self.this_block.reinforcement.consequate(self.this_trial):
-                    self.punish()
-
-    def reward(self):
+    def reward_main(self):
 
         self.this_trial.reward = True
         logger.debug("reward_main")

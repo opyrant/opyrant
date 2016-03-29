@@ -1,5 +1,9 @@
-import logging, traceback, logging.handlers
-import os, sys, socket
+import logging
+import traceback
+import logging.handlers
+import os
+import sys
+import socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure
 from pyoperant import ComponentError, InterfaceError, EndExperiment
@@ -7,29 +11,43 @@ from pyoperant import states, trials, subjects, blocks
 
 logger = logging.getLogger(__name__)
 
+
 def _log_except_hook(*exc_info):
     text = "".join(traceback.format_exception(*exc_info))
     logging.error("Unhandled exception: %s", text)
 
-class BaseExp(object):
-    """Base class for an experiment.
 
-    Keyword arguments:
-    name -- name of this experiment
-    desc -- long description of this experiment
-    debug -- (bool) flag for debugging, switches the logging stream handler
-        between debug and info levels (default=False)
-    light_schedule  -- the light schedule for the experiment. either 'sun' or
+class BaseExp(object):
+    """ Base class for an experiment. This controls most of the experiment logic
+    so you only have to implement specifics for your behavior.
+
+    Parameters
+    ----------
+    name: string
+        Name of this experiment
+    desc: string
+        Long description of this experiment
+    debug: bool
+        Flag for debugging, switches the logging stream handler between debug
+        and info levels
+    light_schedule:
+        The light schedule for the experiment. either 'sun' or
         a tuple of (starttime,endtime) tuples in (hhmm,hhmm) form defining
         time intervals for the lights to be on
-    experiment_path -- path to the experiment
-    stim_path -- path to stimuli (default = <experiment_path>/stims)
-    subject -- an instance of a Subject() object
-    panel -- instance of local Panel() object
-    log_handlers -- A list of dictionaries for configuring log handlers. Currently
-        supported handler types are file and email (in addition to the default stream
-        handler)
-    blocks -- A list of Block() objects
+    experiment_path: string
+        Path to the experiment directory
+    stim_path: string (<experiment_path>/stims)
+        Path to stimulus directory
+    subject: an instance of a Subject() object
+        The subject of the current experiment
+    panel: instance of local Panel() object
+        The full hardware panel. It must implement all required attributes for
+        the current experiment.
+    log_handlers: list of dictionaries
+        Currently supported handler types are file and email (in addition to
+        the default stream handler)
+    blocks: list of Block() objects
+        Initialized block objects that contain the conditions to be tested.
 
     Methods:
     run() -- runs the experiment
@@ -41,6 +59,12 @@ class BaseExp(object):
     STATE_DICT = dict(idle=states.Idle,
                       sleep=states.Sleep,
                       session=states.Session)
+
+    # All panels should have these methods, but it's best to include them in every experiment just in case
+    req_panel_attr = ["sleep",
+                      "reset",
+                      "idle",
+                      "ready"]
 
     def __init__(self, name='', description='', debug=False,
                  filetime_fmt='%Y%m%d%H%M%S', light_schedule='sun',
@@ -253,26 +277,27 @@ class BaseExp(object):
 
     ## Session Flow
     def session_pre(self):
-        """ Runs before the session starts
+        """ Runs before the session starts. Initializes the block queue and
+        records the session start time.
         """
         logger.debug("Beginning session")
         self.session_id += 1
         self.session_start_time = dt.datetime.now()
+        self.block_queue = blocks.BlockHandler(
+                                  blocks=self.blocks,
+                                  queue=self.parameters["block_queue"],
+                                  **self.parameters["block_queue_parameters"]
+                                  )
         self.panel.ready()
 
     def session_main(self):
-        """ Runs the sessions
+        """ Runs the session by looping over the block queue and then running
+        each trial in each block.
         """
 
-        queue = self.parameters["block_queue"]
-        queue_parameters = self.parameters["block_queue_parameters"]
-        weights = self.parameters["block_weights"]
-        for self.this_block in blocks.BlockHandler(blocks=self.blocks,
-                                                   weights=weights,
-                                                   queue=queue,
-                                                   queue_parameters=queue_parameters):
+        for self.this_block in self.block_queue:
             logger.info("Beginning block #%d" % self.this_block.index)
-            for trial in trials.TrialHandler(self.this_block):
+            for trial in self.this_block:
                 trial.run()
 
     def session_post(self):
@@ -310,19 +335,22 @@ class BaseExp(object):
     def response_post(self):
         pass
 
-    def consequate_pre(self):
+    def reward_pre(self):
         pass
 
-    def consequate_main(self):
+    def reward_main(self):
         pass
 
-    def consequate_post(self):
+    def reward_post(self):
         pass
 
-    def reward(self):
+    def punish_pre(self):
         pass
 
-    def punish(self):
+    def punish_main(self):
+        pass
+
+    def punish_post(self):
         pass
 
     def trial_post(self):

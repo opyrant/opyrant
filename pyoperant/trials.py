@@ -86,9 +86,18 @@ class Trial(object):
         self.experiment.response_post()
 
         # Consequate the response with a reward, punishment or neither
-        self.experiment.consequate_pre()
-        self.experiment.consequate_main()
-        self.experiment.consequate_post()
+        if self.response == self.condition.response:
+            self.correct = True
+            if self.condition.is_rewarded and self.block.reinforcement.consequate(self):
+                self.experiment.reward_pre()
+                self.experiment.reward_main()
+                self.experiment.reward_post()
+        else:
+            self.correct = False
+            if self.condition.is_punished and self.block.reinforcement.consequate(self):
+                self.experiment.punish_pre()
+                self.experiment.punish_main()
+                self.experiment.punish_post()
 
         # Finalize trial
         self.experiment.trial_post()
