@@ -144,7 +144,7 @@ class Hopper(BaseComponent):
         self.event["action"] = "up"
         self.solenoid.write(True, event=self.event)
         if self.IR is None:
-            return dt.datetime.now()
+            return datetime.datetime.now()
 
         time_up = self.IR.poll(timeout=self.max_lag)
 
@@ -181,7 +181,7 @@ class Hopper(BaseComponent):
         """ Performs a feed
 
         Parameters
-        ---------
+        ----------
         dur : float, optional
             duration of feed in seconds
 
@@ -217,7 +217,7 @@ class Hopper(BaseComponent):
         """ Performs a feed as a reward
 
         Parameters
-        ---------
+        ----------
         value : float, optional
             duration of feed in seconds
 

@@ -34,7 +34,7 @@ class BaseIO(object):
     def __init__(self, name=None, interface=None, params={},
                  *args, **kwargs):
 
-        super(BaseIO, self).__init__(self, *args, **kwargs)
+        super(BaseIO, self).__init__(*args, **kwargs)
         self.name = name
         self.interface = interface
         self.params = params
@@ -51,6 +51,18 @@ class BooleanInput(BaseIO):
     params: dictionary
         A dictionary of parameters for configuration and boolean read calls.
         Common keys are: subdevice, channel, invert, etc.
+
+    Attributes
+    ----------
+    name: string
+
+    interface: a subclass of base_.BaseInterface
+        Interface through which values are read. Must have '_read_bool' method.
+    params: dictionary
+        A dictionary of parameters for configuration and boolean read calls.
+        Common keys are: subdevice, channel, invert, etc.
+    last_value: bool
+        Most recently returned value
 
     Methods
     -------
@@ -70,6 +82,7 @@ class BooleanInput(BaseIO):
                                            **kwargs)
 
         assert self.interface.can_read_bool
+        self.last_value = False
         self.config()
 
     def config(self):
@@ -96,7 +109,8 @@ class BooleanInput(BaseIO):
             The current status reported by the interface
         """
 
-        return self.interface._read_bool(**self.params)
+        self.last_value = self.interface._read_bool(**self.params)
+        return self.last_value
 
     def poll(self, timeout=None):
         """ Runs a loop, querying for the boolean input to return True.
@@ -105,15 +119,21 @@ class BooleanInput(BaseIO):
         ----------
         timeout: float
 
-
         Returns
         -------
         datetime or None
             peck time or None if timeout
         """
-        if hasattr(self.interface, "poll"):
-            return self.interface._poll(timeout=timeout, **self.params)
 
+        input_time = self.interface._poll(timeout=timeout,
+                                          last_value=self.last_value,
+                                          **self.params)
+        if input_time is not None:
+            self.last_value = True
+        else:
+            self.last_value = False
+
+        return input_time
 
 class BooleanOutput(BaseIO):
     """Class which holds information about boolean outputs and abstracts the

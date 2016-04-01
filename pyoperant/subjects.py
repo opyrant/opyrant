@@ -37,9 +37,9 @@ class Subject(object):
 
         logger.debug("Creating subject object for %s" % name)
         self.name = name
-        self.datastore = datastore
         self.filename = filename
-        logger.info("Created subject object with name %s" % self.datastore)
+        logger.info("Created subject object with name %s" % self.name)
+        self.datastore = None
 
     def create_datastore(self, fields):
         """ Creates a datastore object to store trial data

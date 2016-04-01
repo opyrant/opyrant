@@ -23,34 +23,58 @@ class BaseInterface(object):
     def close(self):
         pass
 
-    def _poll(self, timeout=None, wait=None, *args, **kwargs):
-        """
-        Runs a loop, querying for the boolean input to return True.
-        :param timeout: the time, in seconds, until polling times out.
-        Defaults to no timeout.
-        :param wait: the time, in seconds, to wait between subsequent reads
-        (default no wait).
+    def _poll(self, channel=None, subdevices=None, invert=False,
+              last_value=False, suppress_longpress=False,
+              timeout=None, wait=None, *args, **kwargs):
+        """ Runs a loop, querying for the boolean input to return True.
 
-        :return: timestamp of True read
-        """
+        Parameters
+        ----------
+        channel:
+            default channel argument to pass to _read_bool()
+        subdevices:
+            default subdevices argument to pass to _read_bool()
+        invert: bool
+            whether or not to invert the read value
+        last_value: bool
+            if the last read value was True. Necessary to suppress longpresses
+        suppress_longpress: bool
+            if True, attempts to suppress returning immediately if the button is still being pressed since the last call. If last_value is True, then it waits until the interface reads a single False value before allowing it to return.
+        timeout: float
+            the time, in seconds, until polling times out. Defaults to no timeout.
+        wait: float
+            the time, in seconds, to wait between subsequent reads (default no wait).
 
-        if timeout is not None:
-            start = time.time()
+        Returns
+        -------
+        timestamp of True read or None if timed out
+        """
 
         logger.debug("Begin polling from device %s" % self.device_name)
+        if timeout is not None:
+            start = time.time()
         while True:
-            if self._read_bool(**params):
-                break
+            value = self._read_bool(channel=channel,
+                                   subdevices=subdevices,
+                                   invert=invert,
+                                   *args, **kwargs)
+            if not isinstance(value, bool):
+                raise ValueError("Polling for bool returned something that was not a bool")
+            if value is True:
+                if (last_value is False) or (suppress_longpress is False):
+                    logger.debug("Input detected. Returning")
+                    return datetime.datetime.now()
+            else:
+                last_value = False
 
             if timeout is not None:
                 if time.time() - start >= timeout:
                     logger.debug("Polling timed out. Returning")
+                    return None
 
             if wait is not None:
                 utils.wait(wait)
 
-        logger.debug("Input detected. Returning")
-        return datetime.datetime.now()
 
     def __del__(self):
         self.close()
@@ -61,7 +85,7 @@ class BaseInterface(object):
         If the interface is capable of reading boolean values from the device
         """
 
-        return hasattr(self, "read_bool")
+        return hasattr(self, "_read_bool")
 
     @property
     def can_write_bool(self):
@@ -69,7 +93,7 @@ class BaseInterface(object):
         If the interface is capable of writing boolean values to the device
         """
 
-        return hasattr(self, "write_bool")
+        return hasattr(self, "_write_bool")
 
     @property
     def can_read_analog(self):
@@ -77,7 +101,7 @@ class BaseInterface(object):
         If the interface is capable of reading analog values from the device
         """
 
-        return hasattr(self, "read_analog")
+        return hasattr(self, "_read_analog")
 
     @property
     def can_write_analog(self):
@@ -85,7 +109,7 @@ class BaseInterface(object):
         If the interface is capable of writing analog values from the device
         """
 
-        return hasattr(self, "write_analog")
+        return hasattr(self, "_write_analog")
 
 class AudioInterface(BaseInterface):
     """
@@ -100,7 +124,7 @@ class AudioInterface(BaseInterface):
         super(AudioInterface, self).__init__()
         self.wf = None
 
-    def _config_write(self, *args, **kwargs):
+    def _config_write_analog(self, *args, **kwargs):
 
         pass
 
@@ -112,7 +136,3 @@ class AudioInterface(BaseInterface):
 
         if self.wf is None:
             raise InterfaceError("wavefile is not open, but it should be")
-
-    def load_wav(self, filename):
-
-        wf = wave.open(filename, "r")

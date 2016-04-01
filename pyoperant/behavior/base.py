@@ -66,14 +66,26 @@ class BaseExp(object):
                       "idle",
                       "ready"]
 
-    def __init__(self, name='', description='', debug=False,
-                 filetime_fmt='%Y%m%d%H%M%S', light_schedule='sun',
-                 idle_poll_interval = 60.0, experiment_path='',
-                 stim_path='', subject=None, panel=None, log_handlers=None,
-                 blocks=None, *args, **kwargs):
+    # All experiments should store at least these fields but probably more
+    fields_to_save = ['session',
+                      'index',
+                      'time']
+
+    def __init__(self,
+                 states,
+                 panel,
+                 block_queue,
+                 subject,
+                 name='',
+                 description='',
+                 datastore="csv",
+                 debug=False,
+                 filetime_fmt='%Y%m%d%H%M%S',
+                 experiment_path='',
+                 log_handlers=None,
+                 *args, **kwargs):
 
         super(BaseExp, self).__init__()
-        REQ_PANEL_ATTR = ["sleep", "reset"]
 
         # Initialize experiment parameters received as input
         self.name = name
@@ -81,48 +93,48 @@ class BaseExp(object):
         self.debug = debug
         self.timestamp = dt.datetime.now().strftime(filetime_fmt)
 
-        self.parameters = kwargs
-        self.parameters['filetime_fmt'] = filetime_fmt
-        self.parameters['light_schedule'] = light_schedule
-        self.parameters['idle_poll_interval'] = idle_poll_interval
-
-        self.parameters['experiment_path'] = experiment_path
-        if not os.path.exists(self.parameters["experiment_path"]):
-            logger.debug("Creating %s" % self.parameters["experiment_path"])
-            os.makedirs(self.parameters["experiment_path"])
-
-        if stim_path == '':
-            self.parameters['stim_path'] = os.path.join(experiment_path,
-                                                        'stims')
-        else:
-            self.parameters['stim_path'] = stim_path
-        self.parameters['subject'] = subject.name
+        if not os.path.exists(experiment_path):
+            logger.debug("Creating %s" % experiment_path)
+            os.makedirs(experiment_path)
 
         # configure logging
         if not log_handlers:
             log_handlers = dict()
-        self.parameters['log_handlers'] = log_handlers
-        self.log_config()
+        self.log_handlers = log_handlers
         # Should a file log be mandatory and set up by default? If so, bring it
         # out of the for loop
-        for handler_config in log_handlers.keys():
+        self.log_config()
+        for handler_config in self.log_handlers.keys():
             if handler_config == "file":
                 self.add_file_handler()
             elif handler_config == "email":
                 self.add_email_handler()
 
         self.panel = panel
-        self.req_panel_attr = REQ_PANEL_ATTR # Copy the list
         logger.info('panel %s initialized' % self.panel.__class__.__name__)
 
         logger.info("Preparing block objects")
-        self.blocks = blocks
-        for blk in self.blocks:
-            blk.experiment = self
+        self.block_queue = block_queue
 
         logger.info("Preparing subject object")
         self.subject = subject
-        self.subject.experiment = self
+        output_file = "%s_trialdata_%s.%s" % (subject.name, self.timestamp,
+                                              datastore)
+        self.subject.filename = os.path.join(experiment_path, output_file)
+        self.subject.create_datastore(self.fields_to_save)
+
+        self.session_id = 0
+
+        # Add variables into parameters to save out a config file. I'd rather do this outside of the experiment, perhaps when loading the config file.
+        self.parameters = kwargs
+        self.parameters['filetime_fmt'] = filetime_fmt
+        self.parameters['light_schedule'] = light_schedule
+        self.parameters['idle_poll_interval'] = idle_poll_interval
+        self.parameters['experiment_path'] = experiment_path
+        self.parameters['stim_path'] = stim_path
+        self.parameters['subject'] = subject.name
+        self.parameters['log_handlers'] = log_handlers
+
         #
         # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
         #     self.parameters['shape'] = None
@@ -140,8 +152,8 @@ class BaseExp(object):
     # Logging configure methods
     def log_config(self):
 
-        if "stream" in self.parameters["log_handlers"]:
-            self.log_level = self.parameters["log_handlers"]["stream"].get("level", logging.INFO)
+        if "stream" in self.log_handlers:
+            self.log_level = self.log_handlers["stream"].get("level", logging.INFO)
         elif self.debug:
             self.log_level = logging.DEBUG
         else:
@@ -164,8 +176,8 @@ class BaseExp(object):
         """
         self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
         props = dict()
-        if "file" in self.parameters["log_handlers"]:
-            props = self.parameters["log_handlers"]["file"]
+        if "file" in self.log_handlers:
+            props = self.log_handlers["file"]
             if props["filename"]:
                 self.log_file = os.path.join(self.parameters["experiment_path"], props["filename"])
 
@@ -185,7 +197,7 @@ class BaseExp(object):
         """Add an email handler to the root logger using configurations from the
         config file.
         """
-        handler_config = self.parameters["log_handlers"]["email"]
+        handler_config = self.log_handlers["email"]
         level = handler_config.pop("level", logging.ERROR)
         email_handler = logging.handlers.SMTPHandler(**handler_config)
         email_handler.setLevel(level)
@@ -269,11 +281,10 @@ class BaseExp(object):
             logger.info("Running shaping")
             self.shaper.run_shape(self.parameters['shape'])
 
-        logger.debug("Entering state machine")
-        states.run_state_machine(self,
-                                 start_in='idle',
-                                 error_state='idle',
-                                 **self.STATE_DICT)
+        for state in self.states:
+            if state.check():
+                with state as self.state:
+                    self.state.run()
 
     ## Session Flow
     def session_pre(self):
@@ -283,11 +294,6 @@ class BaseExp(object):
         logger.debug("Beginning session")
         self.session_id += 1
         self.session_start_time = dt.datetime.now()
-        self.block_queue = blocks.BlockHandler(
-                                  blocks=self.blocks,
-                                  queue=self.parameters["block_queue"],
-                                  **self.parameters["block_queue_parameters"]
-                                  )
         self.panel.ready()
 
     def session_main(self):
@@ -296,6 +302,7 @@ class BaseExp(object):
         """
 
         for self.this_block in self.block_queue:
+            self.this_block.experiment = self
             logger.info("Beginning block #%d" % self.this_block.index)
             for trial in self.this_block:
                 trial.run()

@@ -69,57 +69,51 @@ class GoNoGoInterrupt(base.BaseExp):
         does logic on reinforcement
     """
 
+    req_panel_attr = ["sleep",
+                      "reset",
+                      "speaker",
+                      "response_port",
+                      "reward",
+                      "ready",
+                      "idle"]
+
+    fields_to_save = ['session',
+                      'index',
+                      'time',
+                      'stimulus_name',
+                      'condition_name',
+                      'response',
+                      'correct',
+                      'rt',
+                      'reward',
+                      'max_wait',
+                      ]
+
     def __init__(self, *args, **kwargs):
 
         super(GoNoGoInterrupt,  self).__init__(*args, **kwargs)
-
-        REQ_PANEL_ATTR = ["speaker",
-                          "response_port",
-                          "reward",
-                          "ready",
-                          "idle"]
-
-        self.req_panel_attr.extend(REQ_PANEL_ATTR)
-        self.fields_to_save = ['session',
-                               'index',
-                               'time',
-                               'stimulus_name',
-                               'condition_name',
-                               'response',
-                               'correct',  # redundant
-                               'rt',
-                               'reward',  # redundant
-                               'max_wait',
-                               ]
-        self.subject.create_datastore()
         self.start_immediately = False
-        self.session_id = 0
 
     def trial_pre(self):
         ''' this is where we initialize a trial'''
         logger.debug("Starting trial #%d" % self.this_trial.index)
-        # Store trial data
-        self.this_trial.session = self.session_id
-        self.this_trial.annotate(stimulus_name=self.this_trial.stimulus.file_origin,
-                                 condition_name=self.this_trial.condition.name,
-                                 max_wait=self.this_trial.stimulus.duration,
-                                 )
+        stimulus = self.this_trial.stimulus
+        condition = self.this_trial.condition.name
+        self.this_trial.annotate(stimulus_name=stimulus.file_origin,
+                                 condition_name=condition,
+                                 max_wait=stimulus.duration)
+
         if not self.start_immediately:
             logger.debug("Begin polling for a response")
             self.panel.response_port.poll()
             if (self.this_trial.index == 1) and ("session_duration" in self.parameters):
                 self.schedule_current_session()
 
-
-    def stimulus_pre(self):
-        # wait for bird to peck
-        logger.debug("stimulus_pre - queuing file in speaker")
-        self.panel.speaker.queue(self.this_trial.stimulus.file_origin)
-        logger.debug("wavfile queued")
-
     def stimulus_main(self):
         ##play stimulus
         logger.debug("stimulus_main")
+        self.panel.speaker.queue(self.this_trial.stimulus.file_origin)
+        logger.debug("wavfile queued")
         self.this_trial.time = dt.datetime.now()
         logger.info("Trial %d - %s - %s - %s" % (self.this_trial.index,
                                                  self.this_trial.time.strftime("%H:%M:%S"),

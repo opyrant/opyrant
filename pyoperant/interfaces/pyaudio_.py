@@ -3,11 +3,12 @@ import wave
 import logging
 from pyoperant.interfaces import base_
 from pyoperant import InterfaceError
+from pyoperant.events import events
 
 logger = logging.getLogger(__name__)
 # TODO: Clean up _stop_wav logging changes
 
-class PyAudioInterface(base_.BaseInterface):
+class PyAudioInterface(base_.AudioInterface):
     """Class which holds information about an audio device
 
     assign a simple callback function that will execute on each frame
@@ -55,7 +56,7 @@ class PyAudioInterface(base_.BaseInterface):
             self.wf = None
         self.pa.terminate()
 
-    def _get_stream(self,start=False):
+    def _get_stream(self, start=False, event=None):
         """
         """
         def _callback(in_data, frame_count, time_info, status):
@@ -75,22 +76,26 @@ class PyAudioInterface(base_.BaseInterface):
                                    rate=self.wf.getframerate(),
                                    output=True,
                                    output_device_index=self.device_index,
-                                   start=start,
+                                   start=False,
                                    stream_callback=_callback)
+        if start:
+            self._play_wav(event=event)
 
-    def _queue_wav(self,wav_file,start=False):
+    def _queue_wav(self, wav_file, start=False, event=None):
         logger.debug("Queueing wavfile %s" % wav_file)
         self.wf = wave.open(wav_file)
         self.validate()
-        self._get_stream(start=start)
+        self._get_stream(start=start, event=event)
 
-    def _play_wav(self):
+    def _play_wav(self, event=None):
         logger.debug("Playing wavfile")
+        events.write(event)
         self.stream.start_stream()
 
-    def _stop_wav(self):
+    def _stop_wav(self, event=None):
         try:
             logger.debug("Attempting to close pyaudio stream")
+            events.write(event)
             self.stream.close()
             logger.debug("Stream closed")
         except AttributeError:

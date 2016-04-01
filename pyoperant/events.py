@@ -22,6 +22,8 @@ class Events(object):
         self.handlers.append(handler)
 
     def write(self, event):
+        if event is None:
+            return
 
         event["time"] = time.time()
         for handler in self.handlers:
@@ -33,9 +35,11 @@ class EventHandler(object):
 
     STOP_FLAG = 0
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, component=None, *args, **kwargs):
 
         super(EventHandler, self).__init__(*args, **kwargs)
+
+        self.component = component
 
         # Initialize the queue
         self.queue = Queue.Queue(maxsize=0)
@@ -53,7 +57,10 @@ class EventHandler(object):
 
     def filter(self, event):
 
-        return True
+        if self.component is None:
+            return True
+
+        return self.event["name"] == self.component
 
     def run(self):
 
@@ -62,7 +69,7 @@ class EventHandler(object):
             if event is self.STOP_FLAG:
                 logger.debug("Stopping thread %s" % self.thread.name)
                 return
-            if not self.filter(event):
+            if self.filter(event):
                 self.write(event)
 
     def close(self):
@@ -85,14 +92,8 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
         self.component = component
         self.map_to_bit = dict()
         super(EventInterfaceHandler, self).__init__(interface=interface,
-                                                    params=params)
-
-    def filter(self, event):
-
-        if self.component is None:
-            return True
-
-        return self.event["name"] == self.component
+                                                    params=params,
+                                                    component=component)
 
     def write(self, event):
 
@@ -144,7 +145,7 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
 
 class EventLogHandler(EventHandler):
 
-    def __init__(self, filename, format=None):
+    def __init__(self, filename, format=None, component=None):
 
         self.filename = filename
         if format is None:
@@ -152,16 +153,9 @@ class EventLogHandler(EventHandler):
                                      "{name}",
                                      "{action}",
                                      "{metadata}"])
-        super(EventLogHandler, self).__init__()
+        super(EventLogHandler, self).__init__(component=component)
 
     def write(self, event):
-
-        print("Writing to log file")
-        if "time" in event:
-            delay = time.time() - event["time"]
-            print("Took %.4f seconds to write to log handler" % delay)
-            # self.delays.append(delay)
-            self.delay_queue.put(delay)
 
         if "time" not in event:
             event["time"] = time.time()

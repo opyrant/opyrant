@@ -58,19 +58,35 @@ def run_state_machine(experiment, start_in='pre', error_state=None, error_callba
 
 class State(object):
 
-    def __init__(self, experiment):
+    def __init__(self, schedulers=None):
 
-        self.experiment = experiment
+        if schedulers is None:
+            schedulers = list()
+        self.schedulers = schedulers
+        self.experiment = None
+
+    def check(self):
+
+        # If any scheduler says not to run, then don't run
+        for scheduler in self.schedulers:
+            if not scheduler.trigger_start():
+                return False
+
+        return True
 
     def __enter__(self):
 
         logger.info("Entering %s state" % self.__class__.__name__)
+        for scheduler in self.schedulers:
+            scheduler.start()
 
         return self
 
     def __exit__(self, type_, value, traceback):
 
         logger.info("Exiting %s state" % self.__class__.__name__)
+        for scheduler in self.schedulers:
+            scheduler.stop()
         if isinstance(value, Exception):
             log_error_callback(value)
 
@@ -181,56 +197,39 @@ class Sleep(State):
         return super(Sleep, self).__exit__(type_, value, traceback)
 
 
-class BaseScheduler(object):
+class TimeOfDayScheduler(BaseScheduler):
 
-    def __init__(self):
+    def __init__(self, duration=np.inf, interval=np.inf):
 
-        pass
+        self.duration = duration
+        self.interval = interval
+
+        self.start_time = None
+        self.stop_time = None
 
     def start(self):
 
-        pass
-
-    def stop(self):
-
-        pass
+        self.start_time = dt.datetime.now()
 
     def trigger_start(self):
 
-        return False
-
-    def trigger_stop(self):
-
-        return False
-
-
-class ResponseScheduler(BaseScheduler):
-
-    def __init__(self, num_responses=np.inf, num_rewarded=np.inf):
-
-        self.num_responses = num_responses
-        self.num_rewarded = num_rewarded
-
-        self.responses = None
-        self.rewarded = None
-
-    def start(self):
-
-        self.responses = 0
-        self.rewarded = 0
-
-    def trigger_stop(self):
-
-        if (self.responses >= self.num_responses) or (self.rewarded >= self.num_rewarded):
-
+        current_time = dt.datetime.now()
+        if current_time - self.stop_time >= interval:
             return True
-
         else:
-            self.responses += 1
-            self.rewarded += 1
-
             return False
 
+    def stop(self):
+
+        self.stop_time = dt.datetime.now()
+
+    def trigger_stop(self):
+
+        current_time = dt.datetime.now()
+        if current_time - self.start_time >= duration:
+            return True
+        else:
+            return False
 
 class TimeScheduler(BaseScheduler):
 
