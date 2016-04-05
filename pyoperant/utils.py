@@ -279,8 +279,11 @@ def check_time(schedule,fmt="%H:%M"):
     schedule=[('06:00','12:00'),('18:00','24:00')] will have lights on between
 
     """
-    if schedule == 'sun':
+    if schedule.lower() == 'sun':
         if is_day():
+            return True
+    elif schedule.lower() == "night":
+        if not is_day():
             return True
     else:
         for epoch in schedule:

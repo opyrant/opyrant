@@ -1,4 +1,5 @@
 import logging
+import datetime as dt
 import numpy as np
 from pyoperant import (EndSession,
                        EndExperiment,
@@ -7,53 +8,6 @@ from pyoperant import (EndSession,
                        utils)
 
 logger = logging.getLogger(__name__)
-
-
-def log_error_callback(err):
-
-    if isinstance(err, (InterfaceError, ComponentError)):
-        logger.critical(repr(err))
-
-
-def run_state_machine(experiment, start_in='pre', error_state=None, error_callback=None, **states):
-    """runs a state machine defined by the keyword arguments
-
-    >>> def run_start():
-    >>>    print "in 'run_start'"
-    >>>    return 'next'
-    >>> def run_next():
-    >>>    print "in 'run_next'"
-    >>>    return None
-    >>> run_state_machine(start_in='start',
-    >>>                   start=run_start,
-    >>>                   next=run_next)
-    in 'run_start'
-    in 'run_next'
-    None
-    """
-    if error_callback is None:
-        error_callback = log_error_callback
-
-    # make sure the start state has a function to run
-    assert (start_in in states.keys())
-    # make sure all of the arguments passed in are callable
-    for state in states.values():
-        assert hasattr(state, "run")
-
-    state_name = start_in
-    while state_name is not None:
-        try:
-            with states[state_name](experiment) as state:
-                state_name = state.run()
-        except EndExperiment:
-            state_name = None
-        except Exception as e:
-            if error_callback:
-                error_callback(e)
-                raise
-            else:
-                raise
-            state_name = error_state
 
 
 class State(object):
@@ -67,17 +21,26 @@ class State(object):
     Methods
     -------
     check() - Check if the state should be active according to its schedulers
-    run() - Run the state
+    run() - Run the state (should be used within the "with" statement)
+    start() - wrapper for run that includes the "with" statement
     """
 
     def __init__(self, experiment=None, schedulers=None):
 
         if schedulers is None:
             schedulers = list()
+        if not isinstance(schedulers, list):
+            schedulers = [schedulers]
         self.schedulers = schedulers
         self.experiment = experiment
 
     def check(self):
+        """ Checks all of the states schedulers to see if the state should be active.
+
+        Returns
+        -------
+        True if the state should be active and False otherwise.
+        """
 
         # If any scheduler says not to run, then don't run
         for scheduler in self.schedulers:
@@ -87,6 +50,7 @@ class State(object):
         return True
 
     def __enter__(self):
+        """ Start all of the schedulers """
 
         logger.info("Entering %s state" % self.__class__.__name__)
         for scheduler in self.schedulers:
@@ -95,52 +59,41 @@ class State(object):
         return self
 
     def __exit__(self, type_, value, traceback):
-
+        """ Handles KeyboardInterrupt and EndExperiment exceptions to end the experiment, EndSession exceptions to end the session state, and logs all others.
+        """
         logger.info("Exiting %s state" % self.__class__.__name__)
+
+        # Stop the schedulers
         for scheduler in self.schedulers:
             scheduler.stop()
-        if isinstance(value, Exception):
-            log_error_callback(value)
 
-        return False
-
-    def run(self):
-
-        pass
-
-
-class TestState(State):
-
-    def __init__(self, experiment=None):
-
-        self.name = "some name"
-        pass
-
-    def __enter__(self):
-
-        print "Entering: name = %s" % self.name
-        return self
-
-    def __exit__(self, type_, value, traceback):
-
-        print "Exiting"
-        print "type is %s" % str(type_)
-        print "value is %s" % repr(value)
-        print "traceback is %s" % str(traceback)
-
-        if type_ in [KeyboardInterrupt]:
-            print "Caught %s" % value
+        # Handle expected exceptions
+        if type_ in [KeyboardInterrupt, EndExperiment]:
+            logger.info("Finishing experiment")
+            self.experiment.end()
+            return True
+        elif type_ is EndSession:
+            logger.info("Session has ended")
             return True
 
+        # Log all other exceptions and raise them
+        if isinstance(value, Exception):
+            if type_ in [InterfaceError, ComponentError]:
+                logger.critical("There was a critical error in communicating with the hardware!")
+            logger.critical(repr(value))
+
         return False
 
     def run(self):
 
-        import time
-        print "Running test state"
-        print "name is %s" % self.name
-        while True:
-            time.sleep(10)
+        pass
+
+    def start(self):
+        """ Implements the "with" context for this state """
+
+        with self as state:
+            state.run()
+
 
 class Session(State):
     """ Session state for running an experiment. Should be used with the "with" statement (see Examples).
@@ -156,12 +109,18 @@ class Session(State):
     -------
     check() - Check if the state should be active according to its schedulers
     run() - Run the experiment's session_main method
+    start() - wrapper for run that includes the "with" statement
+    update() - Update schedulers at the end of the trial
 
     Examples
     --------
     with Session(experiment=experiment) as state: # Runs experiment.session_pre
         state.run() # Runs experiment.session_main
     # Exiting with statement runs experiment.session_post
+
+    # "with" context is also implemented in the start() method
+    state = Session(experiment=experiment)
+    state.start()
     """
 
     def __enter__(self):
@@ -174,21 +133,20 @@ class Session(State):
 
     def run(self):
 
-        try:
-            self.experiment.session_main()
-        except EndSession:
-            logger.info("Session has ended")
-        except KeyboardInterrupt:
-            logger.info("Finishing experiment")
-            self.experiment.end()
-
-        return "idle"
+        self.experiment.session_main()
 
     def __exit__(self, type_, value, traceback):
 
         self.experiment.session_post()
 
         return super(Session, self).__exit__(type_, value, traceback)
+
+    def update(self):
+        """ Updates all schedulers with information on the current trial """
+
+        if hasattr(self.experiment, "this_trial"):
+            for scheduler in self.schedulers:
+                scheduler.update(self.experiment.this_trial)
 
 
 class Idle(State):
@@ -203,14 +161,7 @@ class Idle(State):
 
     Methods
     -------
-    check() - Check if the state should be active according to its schedulers
     run() - Run the experiment's session_main method
-
-    Examples
-    --------
-    with Session(experiment=experiment) as state: # Runs experiment.session_pre
-        state.run() # Runs experiment.session_main
-    # Exiting with statement runs experiment.session_post
     """
     def __init__(self, experiment=None, poll_interval=60):
 
@@ -219,47 +170,96 @@ class Idle(State):
         self.poll_interval = poll_interval
 
     def run(self):
+        """ Checks if the experiment should be sleeping or running a session and kicks off those states. """
 
         while True:
-            for state in self.experiment.states:
-                state.check()
-        try:
-            if self.experiment.check_light_schedule() == False:
-                return "sleep"
+            if self.experiment.check_sleep_schedule:
+                return self.experiment._sleep.start()
             elif self.experiment.check_session_schedule():
-                return "session"
+                return self.experiment.session.start()
             else:
-                if hasattr(self.experiment.panel, "idle"):
-                    self.experiment.panel.idle()
-                else:
-                    self.experiment.panel.reset()
                 logger.debug("idling...")
-                utils.wait(self.experiment.parameters["idle_poll_interval"])
-                return "idle"
-        except KeyboardInterrupt:
-            logger.info("Exiting experiment")
-            raise
+                utils.wait(self.poll_interval)
 
 
 class Sleep(State):
+    """ A panel sleep state. Turns off all outputs, checking every so often if it should wake up
+
+    Parameters
+    ----------
+    experiment: an instance of a Behavior class
+        The experiment whose session methods should be run.
+    schedulers: an instance of TimeOfDayScheduler
+        The time of day scheduler to follow for when to sleep.
+    poll_interval: int
+        The interval, in seconds, at which other states should be checked to run
+    time_period: string or tuple
+        Either "night" or a tuple of "HH:MM" start and end times. Only used if scheduler is not provided.
+
+    Methods
+    -------
+    run() - Run the experiment's session_main method
+    """
+    def __init__(self, experiment=None, schedulers=None, poll_interval=60,
+                 time_period="night"):
+
+        if schedulers is None:
+            schedulers = [TimeOfDayScheduler(time_period)]
+        self.poll_interval = poll_interval
+
+        super(Idle, self).__init__(experiment=experiment,
+                                   schedulers=schedulers)
 
     def run(self):
+        """ Checks every poll interval whether the panel should be sleeping and puts it to sleep """
 
-        logger.debug("sleeping")
-        self.experiment.panel.sleep()
-        utils.wait(self.experiment.parameters["idle_poll_interval"])
-        if self.experiment.check_light_schedule() == False:
-            return "sleep"
-        else:
-            return "idle"
-
-    def __exit__(self, type_, value, traceback):
-
+        while True:
+            logger.debug("sleeping")
+            self.experiment.panel.sleep()
+            utils.wait(self.poll_interval)
+            if not self.check():
+                break
         self.experiment.panel.wake()
-        return super(Sleep, self).__exit__(type_, value, traceback)
 
 
-class TimeOfDayScheduler(object):
+class BaseScheduler(object):
+    """ Implements a base class for scheduling states
+
+    Summary
+    -------
+    Schedulers allow the state to be started and stopped based on certain critera. For instance, you can start the sleep state when the sun sets, or stop and session state after 100 trials.
+
+    Methods
+    -------
+    check() - Checks whether the state should be active
+    start() - Run when the state starts to initialize any variables
+    stop() - Run when the state finishes to close out any variables
+    update(trial) - Run after each trial to update the scheduler if necessary
+    """
+
+    def __init__(self):
+
+        pass
+
+    def start(self):
+
+        pass
+
+    def stop(self):
+
+        pass
+
+    def update(self, trial):
+
+        pass
+
+    def check(self):
+        """ This should really be implemented by the subclass """
+
+        raise NotImplementedError("Scheduler %s does not have a check method" % self.__class__.__name__)
+
+
+class TimeOfDayScheduler(BaseScheduler):
     """ Schedule a state to start and stop depending on the time of day
 
     Parameters
@@ -276,14 +276,6 @@ class TimeOfDayScheduler(object):
 
         self.time_periods = time_periods
 
-    def start(self):
-
-        pass
-
-    def stop(self):
-
-        pass
-
     def check(self):
         """ Returns True if the state should be active according to this schedule
         """
@@ -291,7 +283,7 @@ class TimeOfDayScheduler(object):
         return utils.check_time(self.time_periods)
 
 
-class TimeScheduler(object):
+class TimeScheduler(BaseScheduler):
     """ Schedules a state to start and stop based on how long the state has been active and how long since the state was previously active.
 
     Parameters
@@ -355,3 +347,44 @@ class TimeScheduler(object):
                 return True
 
         return False
+
+
+class CountScheduler(BaseScheduler):
+    """ Schedules a state stop after a certain number of trials.
+
+    Parameters
+    ----------
+    max_trials: int
+        The maximum number of trials
+
+    Methods
+    -------
+    check() - Returns True if the state has not yet reached max_trials
+
+    TODO: This could be expanded to include things like total number of rewards or correct responses.
+    """
+    def __init__(self, max_trials=0):
+
+        self.max_trials = max_trials
+        self.trial_index = 0
+
+    def check(self):
+        """ Returns True if current trial index is less than max_trials """
+
+        if self.max_trials <= 0:
+            return True
+
+        return self.trial_index < self.max_trials
+
+    def update(self, trial):
+        """ Updates the current trial index """
+        self.trial_index = trial.index
+
+
+available_states = {"idle": Idle,
+                    "session": Session,
+                    "sleep": Sleep}
+
+available_schedulers = {"day": TimeOfDayScheduler,
+                        "timeofday": TimeOfDayScheduler,
+                        "time": TimeScheduler}

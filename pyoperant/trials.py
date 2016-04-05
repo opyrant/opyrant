@@ -104,3 +104,6 @@ class Trial(object):
 
         # Store trial data
         self.experiment.subject.store_data(self)
+
+        # Update session schedulers
+        self.experiment.session.update()

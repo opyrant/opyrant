@@ -110,15 +110,23 @@ class BaseExp(object):
                 self.add_email_handler()
 
         self.panel = panel
+        # Verify the panel can support this behavior
+        self.check_panel_attributes(self.panel)
         logger.info('panel %s initialized' % self.panel.__class__.__name__)
 
         logger.info("Preparing block objects")
         self.block_queue = block_queue
 
         logger.info("Preparing subject object")
-        self.add_subject(subject)
+        self.set_subject(subject)
 
         self.session_id = 0
+
+        # State variables
+        self.session = states.Session(experiment=self)
+        self._sleep = None
+
+        self.finished = False
 
         # Add variables into parameters to save out a config file. I'd rather do this outside of the experiment, perhaps when loading the config file.
         self.parameters = kwargs
@@ -136,7 +144,7 @@ class BaseExp(object):
         #
         # self.shaper = shape.Shaper(self.panel, logger, self.parameters, self.log_error_callback)
 
-    def add_subject(self, subject, output_file=None, output_type="csv"):
+    def set_subject(self, subject, output_file=None, output_type="csv"):
         """ Creates a subject for the current experiment.
 
         Parameters
@@ -164,15 +172,29 @@ class BaseExp(object):
 
         self.subject = subject
 
-    def add_schedule(schedule, *args, **kwargs):
+    def add_sleep_schedule(start, end=None):
+        """ Add a sleep schedule between start and end times
 
-        pass
+        Parameters
+        ----------
+        start: string or instance of Sleep state
+            Can be a string of "HH:MM" or "night", or a pre-created instance of Sleep state
+        end: string
+            In case start is an "HH:MM" string, include an end time that is also "HH:MM"
+        """
+
+        if isinstance(start, states.Sleep):
+            self._sleep = start
+        else:
+            if end is not None:
+                start = (start, end)
+            self._sleep = states.Sleep(start)
 
     def save(self):
         """ Saves a snapshot of the configuration for the current experiment
         """
         self.snapshot_f = os.path.join(self.parameters['experiment_path'], self.timestamp+'.json')
-        logger.debug("Saving snapshot of parameters to %s" % self.snapshot_f)
+        logger.info("Saving snapshot of parameters to %s" % self.snapshot_f)
         if self.snapshot_f.lower().endswith(".json"):
             configure.ConfigureJSON.save(self.parameters, self.snapshot_f, overwrite=True)
         elif self.snapshot_f.lower().endswith(".yaml"):
@@ -245,45 +267,37 @@ class BaseExp(object):
         logger.debug("Email handler added to %s with level %d" % (",".join(email_handler.toaddrs), level))
 
     # Scheduling methods
-    def check_light_schedule(self):
-        """returns true if the lights should be on"""
+    def check_sleep_schedule(self):
+        """returns true if the experiment should be sleeping"""
+        if self._sleep is None:
+            return False
 
-        lights_on = utils.check_time(self.parameters['light_schedule'])
-        logger.debug("Checking light schedule: %s" % lights_on)
-        return lights_on
+        to_sleep = self._sleep.check()
+        logger.debug("Checking sleep schedule: %s" % to_sleep)
+        return to_sleep
 
     def check_session_schedule(self):
         """returns True if the subject should be running sessions"""
 
-        session_on = False
-        if "session_schedule" in self.parameters:
-            session_on = utils.check_time(self.parameters["session_schedule"])
+        return self.session.check()
 
-        logger.debug("Checking session schedule: %s" % session_on)
-        return session_on
+    def set_session_time_limit(self, duration):
+        """ Sets the duration for the current or next session """
 
-    def schedule_current_session(self):
+        scheduler = states.TimeScheduler(duration=duration)
+        self.session.schedulers.append(scheduler)
 
-        duration = self.parameters.get("session_duration", -dt.timedelta(minutes=1))
-        start = getattr(self, "session_start_time", dt.datetime.now())
-        schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
-        self.parameters.setdefault("session_schedule", []).append(schedule)
-        logger.info("Scheduled current session for %s" % " to ".join(schedule))
+    def set_session_trial_limit(self, max_trials):
+        """ Sets the number of trials for the current or upcoming session """
 
-    def schedule_next_session(self):
-
-        current_time = dt.datetime.now()
-        delay = self.parameters.get("intersession_interval", -dt.timedelta(minutes=1))
-        start = current_time + delay
-        stop = current_time - dt.timedelta(minutes=1)
-        schedule = (start.strftime("%H:%M"), (start + duration).strftime("%H:%M"))
-        self.parameters.setdefault("session_schedule", []).append(schedule)
-        logger.info("Scheduled next session for %s" % " to ".join(schedule))
+        scheduler = states.CountScheduler(max_trials=max_trials)
+        self.session.schedulers.append(scheduler)
 
     def end(self):
+        """ Finish the experiment and put the panel to sleep """
 
+        self.finshed = True
         self.panel.sleep()
-        raise EndExperiment
 
     def shape(self):
         """
@@ -292,31 +306,38 @@ class BaseExp(object):
 
         pass
 
-    # State and trial logic. It might be good to have these methods do some common sense functions / logging
-    def run(self):
+    @classmethod
+    def check_panel_attributes(cls, panel, raise_on_fail=True):
 
-        for attr in self.req_panel_attr:
+        missing_attrs = list()
+        for attr in cls.req_panel_attr:
             logger.debug("Checking that panel has attribute %s" % attr)
-            assert hasattr(self.panel, attr)
+            if not hasattr(panel, attr):
+                missing_attrs.append(attr)
+        if len(missing_attrs) > 0:
+            logger.critical("Panel is missing attributes: %s" % ", ".join(missing_attrs))
+            if raise_on_fail:
+                raise AttributeError("Panel is missing attributes: %s" % ", ".join(missing_attrs))
 
+    def run(self):
+        """ Run shaping and then star the experiment """
+
+        logger.info("Preparing to run experiment %s" % self.name)
         logger.debug("Resetting panel")
         self.panel.reset()
+
+        # Save the current configurations
         self.save()
-        # self.init_summary()
 
-        logger.info('%s: running %s with parameters in %s' % (self.name,
-                                                              self.__class__.__name__,
-                                                              self.snapshot_f,
-                                                              )
-                      )
-        if self.parameters['shape']:
-            logger.info("Running shaping")
-            self.shaper.run_shape(self.parameters['shape'])
+        # This still seems very odd to me.
+        logger.debug("Running shaping")
+        self.shape()
 
-        for state in self.states:
-            if state.check():
-                with state as self.state:
-                    self.state.run()
+        # Run until self.end() is called
+        while self.finished is False:
+            idle = states.Idle(experiment=self)
+            # The idle state checks whether it's time to sleep or time to start the session, so start in that state.
+            idle.start()
 
     ## Session Flow
     def session_pre(self):
@@ -324,6 +345,10 @@ class BaseExp(object):
         records the session start time.
         """
         logger.debug("Beginning session")
+        if self.block_queue is None:
+            logger.debug("Initializing BlockHandler")
+            self.block_queue = blocks.BlockHandler(self.blocks)
+
         self.session_id += 1
         self.session_start_time = dt.datetime.now()
         self.panel.ready()
@@ -346,9 +371,7 @@ class BaseExp(object):
         self.panel.idle()
         self.session_end_time = dt.datetime.now()
         logger.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
-        if self.session_id < self.parameters.get("num_sessions", 1):
-            self.schedule_next_session()
-        else:
+        if self.session_id >= self.parameters.get("num_sessions", 1):
             logger.info("Finished all sessions.")
             self.end()
 
