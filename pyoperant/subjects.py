@@ -59,8 +59,8 @@ class Subject(object):
         ValueError
             If filename extension is of unknown type
         """
-        ext = os.path.splitext(self.filename)[1]
-        if ext == "csv":
+        ext = os.path.splitext(self.filename)[1].lower()
+        if ext == ".csv":
             self.datastore = CSVStore(fields, self.filename)
         else:
             raise ValueError("Extension %s is of unknown type" % ext)

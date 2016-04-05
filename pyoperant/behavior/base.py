@@ -72,7 +72,6 @@ class BaseExp(object):
                       'time']
 
     def __init__(self,
-                 states,
                  panel,
                  block_queue,
                  subject,
@@ -117,23 +116,19 @@ class BaseExp(object):
         self.block_queue = block_queue
 
         logger.info("Preparing subject object")
-        self.subject = subject
-        output_file = "%s_trialdata_%s.%s" % (subject.name, self.timestamp,
-                                              datastore)
-        self.subject.filename = os.path.join(experiment_path, output_file)
-        self.subject.create_datastore(self.fields_to_save)
+        self.add_subject(subject)
 
         self.session_id = 0
 
         # Add variables into parameters to save out a config file. I'd rather do this outside of the experiment, perhaps when loading the config file.
         self.parameters = kwargs
-        self.parameters['filetime_fmt'] = filetime_fmt
-        self.parameters['light_schedule'] = light_schedule
-        self.parameters['idle_poll_interval'] = idle_poll_interval
-        self.parameters['experiment_path'] = experiment_path
-        self.parameters['stim_path'] = stim_path
-        self.parameters['subject'] = subject.name
-        self.parameters['log_handlers'] = log_handlers
+        # self.parameters['filetime_fmt'] = filetime_fmt
+        # self.parameters['light_schedule'] = light_schedule
+        # self.parameters['idle_poll_interval'] = idle_poll_interval
+        # self.parameters['experiment_path'] = experiment_path
+        # self.parameters['stim_path'] = stim_path
+        # self.parameters['subject'] = subject.name
+        # self.parameters['log_handlers'] = log_handlers
 
         #
         # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
@@ -141,7 +136,41 @@ class BaseExp(object):
         #
         # self.shaper = shape.Shaper(self.panel, logger, self.parameters, self.log_error_callback)
 
+    def add_subject(self, subject, output_file=None, output_type="csv"):
+        """ Creates a subject for the current experiment.
+
+        Parameters
+        ----------
+        subject: string or instance of Subject class
+            The name of the subject or an already created Subject instance to use.
+        output_file: string
+            The path to the file in which to store data.
+        output_type: string
+            The type of file in which to store data (e.g. "csv")
+        """
+
+        if not isinstance(subject, subjects.Subject):
+            subject = subjects.Subject(subject)
+
+        if subject.datastore is None:
+            if output_file is None:
+                filename = "%s_trialdata_%s.%s" % (subject.name,
+                                                   self.timestamp,
+                                                   output_type)
+            filename = os.path.join(self.parameters["experiment_path"],
+                                    filename)
+            subject.filename = filename
+            subject.create_datastore()
+
+        self.subject = subject
+
+    def add_schedule(schedule, *args, **kwargs):
+
+        pass
+
     def save(self):
+        """ Saves a snapshot of the configuration for the current experiment
+        """
         self.snapshot_f = os.path.join(self.parameters['experiment_path'], self.timestamp+'.json')
         logger.debug("Saving snapshot of parameters to %s" % self.snapshot_f)
         if self.snapshot_f.lower().endswith(".json"):
@@ -151,6 +180,8 @@ class BaseExp(object):
 
     # Logging configure methods
     def log_config(self):
+        """ Configures the basic logging for the experiment. This creates a handler for logging to the console, sets it at the appropriate level (info by default unless overridden in the config file or by the debug flag) and creates the default formatting for log messages.
+        """
 
         if "stream" in self.log_handlers:
             self.log_level = self.log_handlers["stream"].get("level", logging.INFO)
@@ -186,8 +217,9 @@ class BaseExp(object):
         formatter = props.get("format", '"%(asctime)s","%(levelname)s","%(message)s"')
         file_handler.setLevel(level)
         file_handler.setFormatter(logging.Formatter(formatter))
-        root_logger = logging.getLogger()
+
         # Make sure the root logger's level is not too high
+        root_logger = logging.getLogger()
         if root_logger.level > level:
             root_logger.setLevel(level)
         root_logger.addHandler(file_handler)

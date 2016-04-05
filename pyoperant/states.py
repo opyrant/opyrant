@@ -57,19 +57,31 @@ def run_state_machine(experiment, start_in='pre', error_state=None, error_callba
 
 
 class State(object):
+    """ States provide a nice interface for running experiments and transitioning to sleep/idle phases. By implementing __enter__ and __exit__ methods, they use the "with" statement construct that allows for simple error handling (e.g. session ends, keyboard interrupts to stop an experiment, etc.)
 
-    def __init__(self, schedulers=None):
+    Parameters
+    ----------
+    schedulers: list of scheduler objects
+        These determine whether or not the state should be running, using their check method
+
+    Methods
+    -------
+    check() - Check if the state should be active according to its schedulers
+    run() - Run the state
+    """
+
+    def __init__(self, experiment=None, schedulers=None):
 
         if schedulers is None:
             schedulers = list()
         self.schedulers = schedulers
-        self.experiment = None
+        self.experiment = experiment
 
     def check(self):
 
         # If any scheduler says not to run, then don't run
         for scheduler in self.schedulers:
-            if not scheduler.trigger_start():
+            if not scheduler.check():
                 return False
 
         return True
@@ -131,10 +143,32 @@ class TestState(State):
             time.sleep(10)
 
 class Session(State):
+    """ Session state for running an experiment. Should be used with the "with" statement (see Examples).
+
+    Parameters
+    ----------
+    schedulers: list of scheduler objects
+        These determine whether or not the state should be running, using their check method
+    experiment: an instance of a Behavior class
+        The experiment whose session methods should be run.
+
+    Methods
+    -------
+    check() - Check if the state should be active according to its schedulers
+    run() - Run the experiment's session_main method
+
+    Examples
+    --------
+    with Session(experiment=experiment) as state: # Runs experiment.session_pre
+        state.run() # Runs experiment.session_main
+    # Exiting with statement runs experiment.session_post
+    """
 
     def __enter__(self):
 
         self.experiment.session_pre()
+        for scheduler in self.schedulers:
+            scheduler.start()
 
         return self
 
@@ -158,9 +192,37 @@ class Session(State):
 
 
 class Idle(State):
+    """ A simple idle state.
+
+    Parameters
+    ----------
+    experiment: an instance of a Behavior class
+        The experiment whose session methods should be run.
+    poll_interval: int
+        The interval, in seconds, at which other states should be checked to run
+
+    Methods
+    -------
+    check() - Check if the state should be active according to its schedulers
+    run() - Run the experiment's session_main method
+
+    Examples
+    --------
+    with Session(experiment=experiment) as state: # Runs experiment.session_pre
+        state.run() # Runs experiment.session_main
+    # Exiting with statement runs experiment.session_post
+    """
+    def __init__(self, experiment=None, poll_interval=60):
+
+        super(Idle, self).__init__(experiment=experiment,
+                                   schedulers=None)
+        self.poll_interval = poll_interval
 
     def run(self):
 
+        while True:
+            for state in self.experiment.states:
+                state.check()
         try:
             if self.experiment.check_light_schedule() == False:
                 return "sleep"
@@ -197,9 +259,55 @@ class Sleep(State):
         return super(Sleep, self).__exit__(type_, value, traceback)
 
 
-class TimeOfDayScheduler(BaseScheduler):
+class TimeOfDayScheduler(object):
+    """ Schedule a state to start and stop depending on the time of day
 
-    def __init__(self, duration=np.inf, interval=np.inf):
+    Parameters
+    ----------
+    time_periods: string or list
+        The time periods in which this schedule should be active. The value of "sun" can be passed to use the current day-night schedule. Otherwise, pass a list of tuples (start, end) (e.g. [("5:00", "17:00")] for 5am to 5pm)
+
+    Methods
+    -------
+    check() - Returns True if the state should be active according to this schedule
+    """
+
+    def __init__(self, time_periods="sun"):
+
+        self.time_periods = time_periods
+
+    def start(self):
+
+        pass
+
+    def stop(self):
+
+        pass
+
+    def check(self):
+        """ Returns True if the state should be active according to this schedule
+        """
+
+        return utils.check_time(self.time_periods)
+
+
+class TimeScheduler(object):
+    """ Schedules a state to start and stop based on how long the state has been active and how long since the state was previously active.
+
+    Parameters
+    ----------
+    duration: int
+        The duration, in minutes, that the state should be active
+    interval: int
+        The time since the state was last active before it should become active again.
+
+    Methods
+    -------
+    start() - Stores the start time of the current state
+    stop() - Stores the end time of the current state
+    check() - Returns True if the state should activate
+    """
+    def __init__(self, duration=0, interval=0):
 
         self.duration = duration
         self.interval = interval
@@ -208,59 +316,42 @@ class TimeOfDayScheduler(BaseScheduler):
         self.stop_time = None
 
     def start(self):
+        """ Stores the start time of the current state """
 
         self.start_time = dt.datetime.now()
-
-    def trigger_start(self):
-
-        current_time = dt.datetime.now()
-        if current_time - self.stop_time >= interval:
-            return True
-        else:
-            return False
-
-    def stop(self):
-
-        self.stop_time = dt.datetime.now()
-
-    def trigger_stop(self):
-
-        current_time = dt.datetime.now()
-        if current_time - self.start_time >= duration:
-            return True
-        else:
-            return False
-
-class TimeScheduler(BaseScheduler):
-
-    def __init__(self, duration=np.inf, interval=np.inf):
-
-        self.duration = duration
-        self.interval = interval
-
-        self.start_time = None
         self.stop_time = None
 
-    def start(self):
-
-        self.start_time = dt.datetime.now()
-
-    def trigger_start(self):
-
-        current_time = dt.datetime.now()
-        if current_time - self.stop_time >= interval:
-            return True
-        else:
-            return False
-
     def stop(self):
+        """ Stores the end time of the current state """
 
         self.stop_time = dt.datetime.now()
+        self.start_time = None
 
-    def trigger_stop(self):
+    def check(self):
 
         current_time = dt.datetime.now()
-        if current_time - self.start_time >= duration:
-            return True
-        else:
-            return False
+        # If start_time is None, the state is not active. Should it be?
+        if self.start_time is None:
+            # No interval specified, always start
+            if self.interval <= 0:
+                return True
+
+            # The state hasn't activated yet, always start
+            if self.stop_time is None:
+                return True
+
+            # Has it been greater than interval minutes since the last time?
+            if current_time - self.stop_time >= interval:
+                return True
+
+        # If stop_time is None, the state is currently active. Should it stop?
+        if self.stop_time is None:
+            # No duration specified, so do not stop
+            if self.duration <= 0:
+                return True
+
+            # Has the state been active for long enough?
+            if current_time - self.start_time >= duration:
+                return True
+
+        return False
