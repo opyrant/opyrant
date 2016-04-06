@@ -73,8 +73,8 @@ class BaseExp(object):
 
     def __init__(self,
                  panel,
-                 block_queue,
-                 subject,
+                 block_queue=None,
+                 subject=None,
                  name='',
                  description='',
                  datastore="csv",
@@ -117,8 +117,9 @@ class BaseExp(object):
         logger.info("Preparing block objects")
         self.block_queue = block_queue
 
-        logger.info("Preparing subject object")
-        self.set_subject(subject)
+        if subject is not None:
+            logger.info("Preparing subject object")
+            self.set_subject(subject)
 
         self.session_id = 0
 
@@ -133,7 +134,7 @@ class BaseExp(object):
         # self.parameters['filetime_fmt'] = filetime_fmt
         # self.parameters['light_schedule'] = light_schedule
         # self.parameters['idle_poll_interval'] = idle_poll_interval
-        # self.parameters['experiment_path'] = experiment_path
+        self.parameters['experiment_path'] = experiment_path
         # self.parameters['stim_path'] = stim_path
         # self.parameters['subject'] = subject.name
         # self.parameters['log_handlers'] = log_handlers
@@ -168,11 +169,11 @@ class BaseExp(object):
             filename = os.path.join(self.parameters["experiment_path"],
                                     filename)
             subject.filename = filename
-            subject.create_datastore()
+            subject.create_datastore(self.fields_to_save)
 
         self.subject = subject
 
-    def add_sleep_schedule(start, end=None):
+    def add_sleep_schedule(self, start, end=None):
         """ Add a sleep schedule between start and end times
 
         Parameters
@@ -188,7 +189,7 @@ class BaseExp(object):
         else:
             if end is not None:
                 start = (start, end)
-            self._sleep = states.Sleep(start)
+            self._sleep = states.Sleep(time_period=start)
 
     def save(self):
         """ Saves a snapshot of the configuration for the current experiment
@@ -282,13 +283,25 @@ class BaseExp(object):
         return self.session.check()
 
     def set_session_time_limit(self, duration):
-        """ Sets the duration for the current or next session """
+        """ Sets the duration for the current or next session
+
+        Parameters
+        ----------
+        duration: int
+            Time, in minutes, that the session should last
+        """
 
         scheduler = states.TimeScheduler(duration=duration)
         self.session.schedulers.append(scheduler)
 
     def set_session_trial_limit(self, max_trials):
-        """ Sets the number of trials for the current or upcoming session """
+        """ Sets the number of trials for the current or upcoming session
+
+        Parameters
+        ----------
+        max_trials: int
+            Maximum number of trials that should be run
+        """
 
         scheduler = states.CountScheduler(max_trials=max_trials)
         self.session.schedulers.append(scheduler)
@@ -308,16 +321,34 @@ class BaseExp(object):
 
     @classmethod
     def check_panel_attributes(cls, panel, raise_on_fail=True):
+        """ Check if the panel has all required attributes
+
+        Parameters
+        ----------
+        panel: panel instance
+            The panel to check
+        raise_on_fail: bool
+            True causes an AttributeError to be raised if the panel doesn't contain all required attributes
+
+        Returns
+        -------
+        True if panel has all required attributes, False otherwise
+        """
 
         missing_attrs = list()
         for attr in cls.req_panel_attr:
             logger.debug("Checking that panel has attribute %s" % attr)
             if not hasattr(panel, attr):
                 missing_attrs.append(attr)
+
         if len(missing_attrs) > 0:
             logger.critical("Panel is missing attributes: %s" % ", ".join(missing_attrs))
             if raise_on_fail:
                 raise AttributeError("Panel is missing attributes: %s" % ", ".join(missing_attrs))
+            return False
+
+        else:
+            return True
 
     def run(self):
         """ Run shaping and then star the experiment """

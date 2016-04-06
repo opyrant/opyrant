@@ -132,6 +132,7 @@ class Session(State):
         return self
 
     def run(self):
+        """ Runs session main """
 
         self.experiment.session_main()
 
@@ -207,8 +208,8 @@ class Sleep(State):
             schedulers = [TimeOfDayScheduler(time_period)]
         self.poll_interval = poll_interval
 
-        super(Idle, self).__init__(experiment=experiment,
-                                   schedulers=schedulers)
+        super(Sleep, self).__init__(experiment=experiment,
+                                    schedulers=schedulers)
 
     def run(self):
         """ Checks every poll interval whether the panel should be sleeping and puts it to sleep """
@@ -274,6 +275,9 @@ class TimeOfDayScheduler(BaseScheduler):
 
     def __init__(self, time_periods="sun"):
 
+        # Any other sanitizations?
+        if isinstance(time_periods, tuple):
+            time_periods = [time_periods]
         self.time_periods = time_periods
 
     def check(self):
@@ -320,7 +324,8 @@ class TimeScheduler(BaseScheduler):
         self.start_time = None
 
     def check(self):
-
+        """ Checks if the current time is greater than `duration` minutes after start time or `interval` minutes after stop time """
+        
         current_time = dt.datetime.now()
         # If start_time is None, the state is not active. Should it be?
         if self.start_time is None:
@@ -333,8 +338,9 @@ class TimeScheduler(BaseScheduler):
                 return True
 
             # Has it been greater than interval minutes since the last time?
-            if current_time - self.stop_time >= interval:
-                return True
+            time_since = (current_time - self.stop_time).total_seconds() / 60.
+            if time_since < self.interval:
+                return False
 
         # If stop_time is None, the state is currently active. Should it stop?
         if self.stop_time is None:
@@ -343,10 +349,11 @@ class TimeScheduler(BaseScheduler):
                 return True
 
             # Has the state been active for long enough?
-            if current_time - self.start_time >= duration:
-                return True
+            time_since = (current_time - self.start_time).total_seconds() / 60.
+            if time_since >= self.duration:
+                return False
 
-        return False
+        return True
 
 
 class CountScheduler(BaseScheduler):

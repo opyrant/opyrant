@@ -44,7 +44,7 @@ class EventHandler(object):
         # Initialize the queue
         self.queue = Queue.Queue(maxsize=0)
         #self.queue = Queue(maxsize=0)
-        self.delay_queue = Queue.Queue(maxsize=0)
+
 
         # Initialize the thread
         self.thread = threading.Thread(target=self.run, name=self.__class__.__name__)
@@ -52,8 +52,6 @@ class EventHandler(object):
 
         # Run the thread
         self.thread.start()
-
-        self.delays = list()
 
     def filter(self, event):
 
@@ -98,11 +96,6 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
     def write(self, event):
 
         print("Writing to interface")
-        if "time" in event:
-            delay = time.time() - event["time"]
-            print("Took %.4f seconds to write to interface handler" % delay)
-            # self.delays.append(delay)
-            self.delay_queue.put(delay)
 
         try:
             key = (event["name"], event["action"], event["metadata"])
@@ -141,6 +134,61 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
 
     def toggle(self):
         pass
+
+
+class EventDToAHandler(EventHandler):
+
+    def __init__(self, name_bytes=4, action_bytes=4,
+                 metadata_bytes=16, upsample_factor=1, component=None):
+
+        self.name_bytes = name_bytes
+        self.action_bytes = action_bytes
+        self.metadata_bytes = metadata_bytes
+        self.component = component
+        self.map_to_bit = dict()
+        self.queue = Queue.Queue(maxsize=0)
+
+    def filter(self, event):
+
+        return False
+
+    def write(self, event):
+
+        pass
+
+    def to_bit_sequence(self, event):
+
+        key = (event["name"], event["action"], event["metadata"])
+        try:
+            return self.map_to_bit[key]
+        except KeyError:
+            pass
+
+        if event["metadata"] is None:
+            nbytes = self.action_bytes + self.name_bytes
+            metadata_array = []
+        else:
+            nbytes = self.metadata_bytes  + self.action_bytes + self.name_bytes
+            try:
+                metadata_array = np.fromstring(event["metadata"],
+                                               dtype=np.uint16).astype(np.uint8)[:self.metadata_bytes]
+            except TypeError:
+                metadata_array = np.array(map(ord,
+                                              event["metadata"].ljust(self.metadata_bytes)[:self.metadata_bytes]),
+                                          dtype=np.uint8)
+
+        int8_array = np.zeros(nbytes, dtype="uint8")
+        int8_array[:self.name_bytes] = map(ord, event["name"].ljust(self.name_bytes)[:self.name_bytes])
+        int8_array[self.name_bytes:self.name_bytes + self.action_bytes] = map(ord, event["action"].ljust(self.action_bytes)[:self.action_bytes])
+        int8_array[self.name_bytes + self.action_bytes:] = metadata_array
+
+        sequence = ([True] +
+                    np.unpackbits(int8_array).astype(bool).tolist() +
+                    [False])
+        sequence = np.repeat(sequence, self.upsample_factor).astype("float64")
+        self.map_to_bit[key] = sequence
+
+        return sequence
 
 
 class EventLogHandler(EventHandler):
