@@ -174,7 +174,7 @@ class Idle(State):
         """ Checks if the experiment should be sleeping or running a session and kicks off those states. """
 
         while True:
-            if self.experiment.check_sleep_schedule:
+            if self.experiment.check_sleep_schedule():
                 return self.experiment._sleep.start()
             elif self.experiment.check_session_schedule():
                 return self.experiment.session.start()
@@ -205,7 +205,7 @@ class Sleep(State):
                  time_period="night"):
 
         if schedulers is None:
-            schedulers = [TimeOfDayScheduler(time_period)]
+            schedulers = TimeOfDayScheduler(time_period)
         self.poll_interval = poll_interval
 
         super(Sleep, self).__init__(experiment=experiment,
@@ -303,7 +303,7 @@ class TimeScheduler(BaseScheduler):
     stop() - Stores the end time of the current state
     check() - Returns True if the state should activate
     """
-    def __init__(self, duration=0, interval=0):
+    def __init__(self, duration=None, interval=None):
 
         self.duration = duration
         self.interval = interval
@@ -325,12 +325,12 @@ class TimeScheduler(BaseScheduler):
 
     def check(self):
         """ Checks if the current time is greater than `duration` minutes after start time or `interval` minutes after stop time """
-        
+
         current_time = dt.datetime.now()
         # If start_time is None, the state is not active. Should it be?
         if self.start_time is None:
             # No interval specified, always start
-            if self.interval <= 0:
+            if self.interval is None:
                 return True
 
             # The state hasn't activated yet, always start
@@ -345,7 +345,7 @@ class TimeScheduler(BaseScheduler):
         # If stop_time is None, the state is currently active. Should it stop?
         if self.stop_time is None:
             # No duration specified, so do not stop
-            if self.duration <= 0:
+            if self.duration is None:
                 return True
 
             # Has the state been active for long enough?
@@ -370,7 +370,7 @@ class CountScheduler(BaseScheduler):
 
     TODO: This could be expanded to include things like total number of rewards or correct responses.
     """
-    def __init__(self, max_trials=0):
+    def __init__(self, max_trials=None):
 
         self.max_trials = max_trials
         self.trial_index = 0
@@ -378,13 +378,19 @@ class CountScheduler(BaseScheduler):
     def check(self):
         """ Returns True if current trial index is less than max_trials """
 
-        if self.max_trials <= 0:
+        if self.max_trials is None:
             return True
 
         return self.trial_index < self.max_trials
 
+    def stop(self):
+        """ Resets the trial index since the session is over """
+
+        self.trial_index = 0
+
     def update(self, trial):
         """ Updates the current trial index """
+
         self.trial_index = trial.index
 
 

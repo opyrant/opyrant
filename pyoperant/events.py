@@ -1,7 +1,7 @@
 import threading
 import Queue
 # from multiprocessing import Process, Queue
-import time
+import datetime as dt
 import logging
 import numpy as np
 from pyoperant import hwio
@@ -9,30 +9,85 @@ from pyoperant import hwio
 logger = logging.getLogger(__name__)
 
 class Events(object):
+    """ Writes small event dictionaries out to a list of event handlers.
+
+    Attributes
+    ----------
+    handlers: list
+        The currently configured EventHandler instances
+
+    Methods
+    -------
+    add_handler(handler) - appends the handler to the handlers list
+    write(event) - Writes the dictionary `event` to each handler
+    """
 
     def __init__(self):
 
         self.handlers = list()
 
     def add_handler(self, handler):
+        """ Adds the handler to the list of handlers, as long as it supports
+        writing.
+
+        Parameters
+        ----------
+        handler: instance of EventHandler
+            The handler to be added
+        """
 
         if not hasattr(handler, "queue"):
             raise AttributeError("Event handler instance must contain a queue")
 
         self.handlers.append(handler)
 
+    def close_handlers(self):
+        """ Closes all of the existing handlers """
+
+        for handler in self.handlers:
+            handler.close()
+
     def write(self, event):
+        """ Places the event in the queue for each handler to write.
+
+        Parameters
+        ----------
+        event: dict
+            A dictionary describing the current component event. It should have
+            3 keys: name, action, and metadata. A time key will be added
+            containing the datetime of the event.
+        """
         if event is None:
             return
 
-        event["time"] = time.time()
+        event["time"] = dt.datetime.now()
         for handler in self.handlers:
-            print("Adding to handler %s" % str(handler))
+            logger.debug("Adding to handler %s" % str(handler))
             handler.queue.put(event)
 
 
 class EventHandler(object):
+    """ Base class for all event handlers. Creates a separate thread that writes each event out using the handler's "write" method.
 
+    Parameters
+    ----------
+    component: string
+        Optionally argument that allows one to only log events with the
+        specified component name.
+
+    Attributes
+    ----------
+    thread: threading.Thread instance
+        The thread that loops infinitely and writes each event placed in its
+        queue out through the handler.
+    queue: queue.Queue instance
+        The queue that handles communicating events between threads.
+
+    Methods
+    -------
+    write(event) - Writes the event using the specified handler
+    close() - Ends the thread so everything can be properly closed out
+    """
     STOP_FLAG = 0
 
     def __init__(self, component=None, *args, **kwargs):
@@ -45,7 +100,6 @@ class EventHandler(object):
         self.queue = Queue.Queue(maxsize=0)
         #self.queue = Queue(maxsize=0)
 
-
         # Initialize the thread
         self.thread = threading.Thread(target=self.run, name=self.__class__.__name__)
         # self.thread = Process(target=self.run, name=self.__class__.__name__)
@@ -54,6 +108,7 @@ class EventHandler(object):
         self.thread.start()
 
     def filter(self, event):
+        """ Returns True if the event should be written """
 
         if self.component is None:
             return True
@@ -61,7 +116,9 @@ class EventHandler(object):
         return self.event["name"] == self.component
 
     def run(self):
-
+        """ Runs inside the separate thread and calls the class' `write` method
+        on any new events
+        """
         while True:
             event = self.queue.get()
             if event is self.STOP_FLAG:
@@ -71,6 +128,7 @@ class EventHandler(object):
                 self.write(event)
 
     def close(self):
+        """ Ends the separate thread """
 
         self.queue.put(self.STOP_FLAG)
 
@@ -78,9 +136,49 @@ class EventHandler(object):
 
         self.close()
 
+    def write(self, event):
+
+        raise NotImplementedError("Event handlers must implement a `write` method")
+
 
 class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
+    """ Handler to send event information out to a boolean interface. The event
+    information is sent as a sequence of three chunks of bits, the first
+    describing the name of the component, the second describing the action, and
+    the third with any additional metadata. If the event details are too long to
+    fit in the requested number of bytes, they are truncated first.
 
+    Parameters
+    ----------
+    interface: instance of an Interface
+        The interface to use to write the bit string out to hardware
+    params: dictionary
+        A set of key-value pairs that are sent to the interface when configuring
+        the boolean write and when writing to it.
+    name_bytes: int
+        The number of bytes to use for encoding the name of the component
+    action_bytes: int
+        The number of bytes to use for encoding the action being performed
+    metadata_bytes: int
+        The number of bytes to use for any additional metadata.
+    component: string
+        Optionally argument that allows one to only log events with the
+        specified component name.
+
+    Attributes
+    ----------
+    thread: threading.Thread instance
+        The thread that loops infinitely and writes each event placed in its
+        queue out through the handler.
+    queue: queue.Queue instance
+        The queue that handles communicating events between threads.
+
+    Methods
+    -------
+    write(event) - Writes the event using the specified handler
+    close() - Ends the thread so everything can be properly closed out
+    to_bit_sequence(event) - Serializes the event details into a string of bits
+    """
     def __init__(self, interface, params={}, name_bytes=4, action_bytes=4,
                  metadata_bytes=16, component=None):
 
@@ -94,8 +192,14 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
                                                     component=component)
 
     def write(self, event):
+        """ Writes the event out the boolean output
 
-        print("Writing to interface")
+        Parameters
+        ----------
+        event: dict
+            A dictionary describing the current component event. It should have
+            3 keys: name, action, and metadata.
+        """
 
         try:
             key = (event["name"], event["action"], event["metadata"])
@@ -105,6 +209,19 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
         self.interface._write_bool(value=bits, **self.params)
 
     def to_bit_sequence(self, event):
+        """ Creates an array of bits containing the details in the event
+        dictionary. Once created, the array is cached to speed up future writes.
+
+        Parameters
+        ----------
+        event: dict
+            A dictionary describing the current component event. It should have
+            3 keys: name, action, and metadata.
+
+        Returns
+        -------
+        The array of bits
+        """
 
         if event["metadata"] is None:
             nbytes = self.action_bytes + self.name_bytes
@@ -137,26 +254,69 @@ class EventInterfaceHandler(EventHandler, hwio.BooleanOutput):
 
 
 class EventDToAHandler(EventHandler):
+    """ Handler to format event information so that it can be sent as a sequence
+    of bits out an analog output. The event information is returned as a
+    sequence of three chunks of bits, the first describing the name of the
+    component, the second describing the action, and the third with any
+    additional metadata. If the event details are too long to fit in the
+    requested number of bytes, they are truncated first. Before being returned,
+    the sequence is upsampled by a certain factor and then converted to float64.
 
+    Parameters
+    ----------
+    name_bytes: int
+        The number of bytes to use for encoding the name of the component
+    action_bytes: int
+        The number of bytes to use for encoding the action being performed
+    metadata_bytes: int
+        The number of bytes to use for any additional metadata.
+    upsample_factor: int
+        The factor by which the bit sequence should be upsampled.
+    component: string
+        Optionally argument that allows one to only log events with the
+        specified component name.
+
+    Methods
+    -------
+    to_bit_sequence(event) - Serializes the event details into a string of bits
+    """
     def __init__(self, name_bytes=4, action_bytes=4,
                  metadata_bytes=16, upsample_factor=1, component=None):
 
         self.name_bytes = name_bytes
         self.action_bytes = action_bytes
         self.metadata_bytes = metadata_bytes
+        self.upsample_factor = upsample_factor
         self.component = component
         self.map_to_bit = dict()
         self.queue = Queue.Queue(maxsize=0)
 
     def filter(self, event):
+        """ Always returns False, as this one should never be called by Events
+        """
 
         return False
 
     def write(self, event):
-
+        """ Does nothing """
         pass
 
     def to_bit_sequence(self, event):
+        """ Creates an array of bits containing the details in the event
+        dictionary. This array is then upsampled and converted to float64 to be
+        sent down an analog output. Once created, the array is cached to speed
+        up future calls.
+
+        Parameters
+        ----------
+        event: dict
+            A dictionary describing the current component event. It should have
+            3 keys: name, action, and metadata.
+
+        Returns
+        -------
+        The array of bits expressed as analog values
+        """
 
         key = (event["name"], event["action"], event["metadata"])
         try:
@@ -190,9 +350,37 @@ class EventDToAHandler(EventHandler):
 
         return sequence
 
+    def close(self):
+        """ Nothing needs to be done """
+        pass
+
 
 class EventLogHandler(EventHandler):
+    """ Writes event details out to a file log.
 
+    Parameters
+    ----------
+    filename: string
+        Path to the output file
+    format: string
+        A string that can be formatted with the event dictionary
+    component: string
+        Optional argument that allows one to only log events with the
+        specified component name.
+
+    Attributes
+    ----------
+    thread: threading.Thread instance
+        The thread that loops infinitely and writes each event placed in its
+        queue out through the handler.
+    queue: queue.Queue instance
+        The queue that handles communicating events between threads.
+
+    Methods
+    -------
+    write(event) - Writes the event to the file
+    close() - Ends the thread so everything can be properly closed out
+    """
     def __init__(self, filename, format=None, component=None):
 
         self.filename = filename
@@ -204,9 +392,18 @@ class EventLogHandler(EventHandler):
         super(EventLogHandler, self).__init__(component=component)
 
     def write(self, event):
+        """ Writes the event out to the file
+
+        Parameters
+        ----------
+        event: dict
+            A dictionary describing the current component event. It should have
+            4 keys: name, action, and metadata added by the compnent, and time
+            added by the Events class.
+        """
 
         if "time" not in event:
-            event["time"] = time.time()
+            event["time"] = dt.datetime.now()
 
         with open(self.filename, "a") as fh:
             fh.write(self.format.format(**event) + "\n")

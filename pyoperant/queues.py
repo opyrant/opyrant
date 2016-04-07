@@ -373,13 +373,25 @@ class BaseHandler(object):
     ----------
     queue: queue generator or class instance
         The queue that will be iterated over.
+    queue_parameters: dict
+        All additional parameters used to initialize the queue.        
     """
 
     def __init__(self, queue, items, **queue_parameters):
 
         if not hasattr(queue, "__call__"):
             raise TypeError("queue must be a callable function or class")
+        # Store these in case we need to reset
+        self._queue = queue
+        self._items = items
+
         self.queue = queue(items=items, **queue_parameters)
+        self.queue_parameters = queue_parameters
+
+    def reset(self):
+        """ Reset the queue """
+
+        self.queue = self._queue(items=self._items, **self.queue_parameters)
 
     def __iter__(self):
 

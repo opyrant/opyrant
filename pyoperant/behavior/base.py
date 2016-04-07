@@ -7,14 +7,17 @@ import socket
 import datetime as dt
 from pyoperant import utils, components, local, hwio, configure
 from pyoperant import ComponentError, InterfaceError, EndExperiment
-from pyoperant import states, trials, subjects, blocks
+from pyoperant import states, subjects, queues
+from pyoperant.events import events, EventLogHandler
+import pyoperant.blocks as blocks_
+import pyoperant.trials as trials_
 
 logger = logging.getLogger(__name__)
 
 
 def _log_except_hook(*exc_info):
     text = "".join(traceback.format_exception(*exc_info))
-    logging.error("Unhandled exception: %s", text)
+    logger.error("Unhandled exception: %s", text)
 
 
 class BaseExp(object):
@@ -23,42 +26,105 @@ class BaseExp(object):
 
     Parameters
     ----------
+    panel: Panel instance or string
+        Instance of a panel or the name of a panel from local.py. It must
+        implement all required attributes for the current experiment.
+    block_queue: BlockHandler instance or a queue function or Class
+        The queue for looping over blocks. If this is not defined, the
+        block_queue will be used.
+    subject: Subject instance
+        The subject that will handle data storage. If this is not defined, one
+        will be created using subject_name, filename, and datastore
+        parameters. If those aren't provided, you can add a subject using the
+        "set_subject" method
+    conditions: list
+        A list of stimulus conditions instances. These currently need to be
+        defined explicitly.
+    blocks: list
+        A list of Block instances. If this is not provided, a single block will
+        be created using the "conditions", "queue" and "queue_parameters"
+        parameters.
+    sleep: Sleep state instance
+        Controls when the experiment is in the sleep state. If not provided,
+        one will be created from the "sleep_schedule" and "poll_interval"
+        parameters, if set, or can be added using the "add_sleep_schedule"
+        method.
+    session: Session state instance
+        Controls the scheduling and running of an experimental session. If not
+        provided, one will be created from the "max_trials", "session_duration",
+        and "session_interval" parameters. The session duration/interval and
+        trial limit can be set using the "set_session_time_limits" and
+        "set_session_trial_limit" methods.
+    idle: Idle state instance
+        Controls how the experiment behaves while idling. If not provided, one
+        will be created from the "poll_interval" parameter.
     name: string
         Name of this experiment
-    desc: string
+    description: string
         Long description of this experiment
     debug: bool
-        Flag for debugging, switches the logging stream handler between debug
-        and info levels
-    light_schedule:
-        The light schedule for the experiment. either 'sun' or
-        a tuple of (starttime,endtime) tuples in (hhmm,hhmm) form defining
-        time intervals for the lights to be on
+        Flag for debugging, switches the logging stream handler between to DEBUG level
+    num_sessions: int
+        The number of sessions to run.
+    filetime_fmt: string
+        The format for the time string in the name of the file.
     experiment_path: string
-        Path to the experiment directory
-    stim_path: string (<experiment_path>/stims)
-        Path to stimulus directory
-    subject: an instance of a Subject() object
-        The subject of the current experiment
-    panel: instance of local Panel() object
-        The full hardware panel. It must implement all required attributes for
-        the current experiment.
+        Path to the experiment data directory. Provides the default location to store subject data.
     log_handlers: list of dictionaries
         Currently supported handler types are file and email (in addition to
         the default stream handler)
-    blocks: list of Block() objects
-        Initialized block objects that contain the conditions to be tested.
+    sleep_schedule: string or tuple
+        The sleep schedule for the experiment. either 'night' or a tuple of
+        (starttime,endtime) in (hhmm,hhmm) form defining the time interval for
+        the experiment to sleep.
+    max_trials: int
+        The maximum number of trials for each experimental session. Can also be
+        set using the "set_session_trial_limit" method.
+    session_duration: int
+        The maximum duration, in minutes, of each experimental session. Can also
+        be set using the "set_session_time_limits" method.
+    session_interval: int
+        The minimum intersession interval in minutes. Can also be set using the
+        "set_session_time_limits" method.
+    poll_interval: int
+        The number of seconds to wait between successive checks regarding when
+        to start/stop sleeping or start an experimental session.
+    queue: a queue name, function, or Class
+        The queue to use to loop over stimulus conditions within a block.
+    queue_parameters: dictionary
+        Any additional parameters to provide the "queue".
+    reinforcement: a reinforcement name or Class
+        The type of reinforcement to use for a block
+    subject_name: string
+        The name of the subject performing the experiment
+    datastore: string
+        The type of file to store data in (e.g. "csv")
+    filename: string
+        The name of the file in which to store data. If the full path is not
+        provided, it will be in the path given by the "experiment_path"
+        parameter.
 
-    Methods:
+    All other key-value pairs get placed into the parameters attribute
+
+    Methods
+    -------
     run() -- runs the experiment
 
-    """
+    Required Panel Attributes
+    -------------------------
+    sleep - Puts the panel to sleep
+    reset - Sets the panel back to a nice initial state
+    ready - Prepares the panel to run the behavior (e.g. turn on the
+            response_port light and put the feeder down)
+    idle - Sets the panel into an idle state for when the experiment is not
+           running
 
-    # This should contain all states to be used in the state machine.
-    # "idle" is the only one that is required.
-    STATE_DICT = dict(idle=states.Idle,
-                      sleep=states.Sleep,
-                      session=states.Session)
+    Fields To Save
+    --------------
+    session - The index of the current session
+    index - The index of the current trial
+    time - The start time of the trial
+    """
 
     # All panels should have these methods, but it's best to include them in every experiment just in case
     req_panel_attr = ["sleep",
@@ -73,150 +139,215 @@ class BaseExp(object):
 
     def __init__(self,
                  panel,
-                 block_queue=None,
+                 block_queue=queues.block_queue,
                  subject=None,
-                 name='',
-                 description='',
-                 datastore="csv",
+                 conditions=None,
+                 blocks=None,
+                 sleep=None,
+                 session=None,
+                 idle=None,
+                 name='Experiment',
+                 description='A pyoperant experiment',
                  debug=False,
+                 num_sessions=1,
                  filetime_fmt='%Y%m%d%H%M%S',
                  experiment_path='',
                  log_handlers=None,
+                 sleep_schedule=None,
+                 max_trials=None,
+                 session_duration=None,
+                 session_interval=None,
+                 poll_interval=60,
+                 queue=queues.random_queue,
+                 queue_parameters=None,
+                 reinforcement=None,
+                 subject_name=None,
+                 datastore="csv",
+                 filename=None,
                  *args, **kwargs):
 
         super(BaseExp, self).__init__()
 
-        # Initialize experiment parameters received as input
-        self.name = name
-        self.description = description
-        self.debug = debug
-        self.timestamp = dt.datetime.now().strftime(filetime_fmt)
-
+        # Initialize the experiment directory to start storing data
         if not os.path.exists(experiment_path):
             logger.debug("Creating %s" % experiment_path)
             os.makedirs(experiment_path)
+        self.experiment_path = experiment_path
 
-        # configure logging
-        if not log_handlers:
+        # Set up logging
+        if log_handlers is None:
             log_handlers = dict()
-        self.log_handlers = log_handlers
-        # Should a file log be mandatory and set up by default? If so, bring it
-        # out of the for loop
-        self.log_config()
-        for handler_config in self.log_handlers.keys():
-            if handler_config == "file":
-                self.add_file_handler()
-            elif handler_config == "email":
-                self.add_email_handler()
 
+        # Stream handler is the console and takes level as it's only config
+        stream_handler = log_handlers.pop("stream", dict())
+        # Initialize the logging
+        self.configure_logging(debug=debug, **stream_handler)
+
+        # Event logging takes filename, format, and component as arguments
+        event_handler = log_handlers.pop("event", dict())
+        self.configure_event_logging(**event_handler)
+
+        # File handler has keywords of filename and level
+        if "file" in log_handlers:
+            self.add_file_handler(**log_handlers["file"])
+
+        # Email handler has keywords of mailhost, toaddrs, fromaddr, subject, credentials, secure, and level
+        if "email" in log_handlers:
+            self.add_email_handler(**log_handlers["email"])
+
+        # Experiment descriptors
+        self.name = name
+        self.description = description
+        self.timestamp = dt.datetime.now().strftime(filetime_fmt)
+        logger.debug("Initializing experiment: %s" % self.name)
+        logger.debug(self.description)
+        logger.debug("This experiment will store the following trial " +
+                     "parameters:\n%s" % ", ".join(self.fields_to_save))
+
+        # Initialize the panel
+        logger.debug("Panel must support these attributes: " +
+                     "%s" % ", ".join(self.req_panel_attr))
+        if isinstance(panel, str) and hasattr(local, panel):
+            panel = getattr(local, panel)
         self.panel = panel
         # Verify the panel can support this behavior
-        self.check_panel_attributes(self.panel)
-        logger.info('panel %s initialized' % self.panel.__class__.__name__)
+        self.check_panel_attributes(panel)
+        logger.debug('Initialized panel: %s' % self.panel.__class__.__name__)
 
-        logger.info("Preparing block objects")
-        self.block_queue = block_queue
-
+        # Initialize the subject
         if subject is not None:
-            logger.info("Preparing subject object")
-            self.set_subject(subject)
+            subject = subject_name
+        logger.info("Preparing subject and data storage")
+        self.set_subject(subject_name, filename, datastore)
+        logger.debug("Data will be stored at %s" % self.subject.filename)
 
+        # Initialize blocks and block_queue
+        logger.debug("Preparing blocks and block_queue")
+        if isinstance(block_queue, blocks_.BlockHandler):
+            self.block_queue = block_queue
+            self.blocks = block_queue.blocks
+        elif blocks is not None:
+            if isinstance(blocks, blocks_.Block):
+                blocks = [blocks]
+            self.blocks = blocks
+            logger.debug("Creating block_queue from blocks")
+            self.block_queue = blocks_.BlockHandler(blocks, queue=block_queue)
+        elif conditions is not None:
+            logger.debug("Creating block_queue from stimulus conditions")
+            if queue_parameters is None:
+                queue_parameters = dict()
+            self.blocks = [blocks_.Block(conditions,
+                                         queue=queue,
+                                         reinforcement=reinforcement,
+                                         **queue_parameters)]
+            self.block_queue = blocks_.BlockHandler(self.blocks,
+                                                    queue=block_queue)
+        else:
+            raise ValueError("Could not create blocks for the experiment. " +
+                             "Please provide conditions, blocks, or block_queue")
+
+        # Initialize the states
+        if sleep is not None:
+            self.add_sleep_schedule(sleep)
+        elif sleep_schedule is not None:
+            self.add_sleep_schedule(sleep_schedule,
+                                    poll_interval=poll_interval)
+        else:
+            self._sleep = None
+
+        if session is None:
+            session = states.Session()
+        self.session = session
+        self.session.experiment = self
+        if max_trials is not None:
+            self.set_session_trial_limit(max_trials)
+        if session_duration is not None or session_interval is not None:
+            self.set_session_time_limits(duration=session_duration,
+                                         interval=session_interval)
+        self.num_sessions = num_sessions
+
+        if idle is None:
+            idle = states.Idle(poll_interval=poll_interval)
+        self._idle = idle
+        self._idle.experiment = self
+
+        self.parameters = kwargs
+
+        # Get ready to run!
         self.session_id = 0
-
-        # State variables
-        self.session = states.Session(experiment=self)
-        self._sleep = None
-
         self.finished = False
 
-        # Add variables into parameters to save out a config file. I'd rather do this outside of the experiment, perhaps when loading the config file.
-        self.parameters = kwargs
-        # self.parameters['filetime_fmt'] = filetime_fmt
-        # self.parameters['light_schedule'] = light_schedule
-        # self.parameters['idle_poll_interval'] = idle_poll_interval
-        self.parameters['experiment_path'] = experiment_path
-        # self.parameters['stim_path'] = stim_path
-        # self.parameters['subject'] = subject.name
-        # self.parameters['log_handlers'] = log_handlers
-
-        #
-        # if 'shape' not in self.parameters or self.parameters['shape'] not in ['block1', 'block2', 'block3', 'block4', 'block5']:
-        #     self.parameters['shape'] = None
-        #
-        # self.shaper = shape.Shaper(self.panel, logger, self.parameters, self.log_error_callback)
-
-    def set_subject(self, subject, output_file=None, output_type="csv"):
+    def set_subject(self, subject, filename=None, datastore="csv"):
         """ Creates a subject for the current experiment.
 
         Parameters
         ----------
         subject: string or instance of Subject class
             The name of the subject or an already created Subject instance to use.
-        output_file: string
+        filename: string
             The path to the file in which to store data.
-        output_type: string
+        datastore: string
             The type of file in which to store data (e.g. "csv")
         """
-
+        if subject is None:
+            raise ValueError("Subject has not yet been defined. " +
+                             "Provide a value to either the subject " +
+                             "or subject_name parameter for the behavior.")
         if not isinstance(subject, subjects.Subject):
             subject = subjects.Subject(subject)
 
         if subject.datastore is None:
-            if output_file is None:
+            if filename is None:
                 filename = "%s_trialdata_%s.%s" % (subject.name,
                                                    self.timestamp,
-                                                   output_type)
-            filename = os.path.join(self.parameters["experiment_path"],
-                                    filename)
+                                                   datastore)
+            # Add directory if filename is not a full path
+            if len(os.path.split(filename)[0]) == 0:
+                filename = os.path.join(self.experiment_path,
+                                        filename)
             subject.filename = filename
             subject.create_datastore(self.fields_to_save)
 
+        logger.debug("Creating subject")
         self.subject = subject
 
-    def add_sleep_schedule(self, start, end=None):
+    def add_sleep_schedule(self, time_period, poll_interval=60):
         """ Add a sleep schedule between start and end times
 
         Parameters
         ----------
-        start: string or instance of Sleep state
-            Can be a string of "HH:MM" or "night", or a pre-created instance of Sleep state
-        end: string
-            In case start is an "HH:MM" string, include an end time that is also "HH:MM"
+        time_period: string, tuple, or instance of Sleep state
+            Can be a string of "night", a tuple of ("HH:MM", "HH:MM"), or a
+            pre-created instance of Sleep state
+        poll_interval: int
+            The number of seconds to wait between successive checks regarding
+            when to start/stop sleeping
         """
 
         if isinstance(start, states.Sleep):
             self._sleep = start
         else:
-            if end is not None:
-                start = (start, end)
-            self._sleep = states.Sleep(time_period=start)
-
-    def save(self):
-        """ Saves a snapshot of the configuration for the current experiment
-        """
-        self.snapshot_f = os.path.join(self.parameters['experiment_path'], self.timestamp+'.json')
-        logger.info("Saving snapshot of parameters to %s" % self.snapshot_f)
-        if self.snapshot_f.lower().endswith(".json"):
-            configure.ConfigureJSON.save(self.parameters, self.snapshot_f, overwrite=True)
-        elif self.snapshot_f.lower().endswith(".yaml"):
-            configure.ConfigureYAML.save(self.parameters, self.snapshot_f, overwrite=True)
+            self._sleep = states.Sleep(time_period=time_period,
+                                       poll_interval=poll_interval)
+        logger.debug("Adding sleep state")
+        self._sleep.experiment = self
 
     # Logging configure methods
-    def log_config(self):
+    def configure_logging(self, level=logging.INFO, debug=False):
         """ Configures the basic logging for the experiment. This creates a handler for logging to the console, sets it at the appropriate level (info by default unless overridden in the config file or by the debug flag) and creates the default formatting for log messages.
         """
 
-        if "stream" in self.log_handlers:
-            self.log_level = self.log_handlers["stream"].get("level", logging.INFO)
-        elif self.debug:
+        if debug is True:
             self.log_level = logging.DEBUG
         else:
-            self.log_level = logging.INFO
+            self.log_level = level
 
-        sys.excepthook = _log_except_hook # send uncaught exceptions to log file
+        sys.excepthook = _log_except_hook  # send uncaught exceptions to file
 
-        logging.basicConfig(level=self.log_level,
-                            format='"%(asctime)s","%(levelname)s","%(message)s"')
+        logging.basicConfig(
+            level=self.log_level,
+            format='"%(asctime)s","%(levelname)s","%(message)s"'
+            )
 
         # Make sure that the stream handler has the requested log level.
         root_logger = logging.getLogger()
@@ -224,41 +355,83 @@ class BaseExp(object):
             if isinstance(handler, logging.StreamHandler):
                 handler.setLevel(self.log_level)
 
-    def add_file_handler(self):
-        """ Add a file handler to the root logger using either default
-        settings or settings from the config file
-        """
-        self.log_file = os.path.join(self.parameters['experiment_path'], self.parameters['subject'] + '.log')
-        props = dict()
-        if "file" in self.log_handlers:
-            props = self.log_handlers["file"]
-            if props["filename"]:
-                self.log_file = os.path.join(self.parameters["experiment_path"], props["filename"])
+    def configure_event_logging(self, filename="events.log", format=None,
+                                component=None):
+        """ Sets up the logging of component events to a file. See events.py for
+        more details.
 
-        file_handler = logging.FileHandler(self.log_file)
-        level = props.get("level", self.log_level)
-        formatter = props.get("format", '"%(asctime)s","%(levelname)s","%(message)s"')
+        Parameters
+        ----------
+
+        """
+
+        # Add directory if filename is not a full path
+        if len(os.path.split(filename)[0]) == 0:
+            filename = os.path.join(self.experiment_path, filename)
+        log_handler = EventLogHandler(filename=filename, format=format,
+                                      component=component)
+        events.add_handler(log_handler)
+
+    def add_file_handler(self, filename="experiment.log",
+                         format='"%(asctime)s","%(levelname)s","%(message)s"',
+                         level=logging.INFO):
+        """ Add a file handler to the root logger
+
+        Parameters
+        ----------
+        filename: string
+            name of the experiment log file
+        format: string
+            format for log messages
+        level: logging level
+            defaults to logging.INFO, but could be set to logging.DEBUG
+        """
+
+        # Add directory if filename is not a full path
+        if len(os.path.split(filename)[0]) == 0:
+            filename = os.path.join(self.experiment_path, filename)
+
+        file_handler = logging.FileHandler(filename)
         file_handler.setLevel(level)
-        file_handler.setFormatter(logging.Formatter(formatter))
+        file_handler.setFormatter(logging.Formatter(format))
 
         # Make sure the root logger's level is not too high
         root_logger = logging.getLogger()
         if root_logger.level > level:
             root_logger.setLevel(level)
         root_logger.addHandler(file_handler)
-        logger.debug("File handler added to %s with level %d" % (self.log_file, level))
+        logger.debug("File handler added to %s with level %d" % (filename,
+                                                                 level))
 
-    def add_email_handler(self):
+    def add_email_handler(self, toaddrs, mailhost="localhost",
+                          fromaddr="Pyoperant <experiment@pyoperant.com",
+                          subject="Pyoperant notice", level=logging.ERROR,
+                          **kwargs):
         """Add an email handler to the root logger using configurations from the
         config file.
+
+        Parameters
+        ----------
+        toaddrs: list
+            A list of email addresses to send notifications
+        mailhost: string
+            The mail server
+        fromaddr: string
+            The from address for the email
+        subject: string
+            Subject of the email
+        level: logging level
+            The level of log messages that should send an email. Probably want
+            logging.ERROR or something similarly high
         """
-        handler_config = self.log_handlers["email"]
-        level = handler_config.pop("level", logging.ERROR)
-        email_handler = logging.handlers.SMTPHandler(**handler_config)
+        email_handler = logging.handlers.SMTPHandler(toaddrs=toaddrs,
+                                                     mailhost=mailhost,
+                                                     fromaddr=fromaddr,
+                                                     subject=subject,
+                                                     **kwargs)
         email_handler.setLevel(level)
 
-        heading = '%s\n' % (self.parameters['subject'])
-        formatter = logging.Formatter(heading+'%(levelname)s at %(asctime)s:\n%(message)s')
+        formatter = logging.Formatter('%(levelname)s at %(asctime)s:\n%(message)s')
         email_handler.setFormatter(formatter)
         root_logger = logging.getLogger()
         # Make sure the root logger's level is not too high
@@ -282,16 +455,17 @@ class BaseExp(object):
 
         return self.session.check()
 
-    def set_session_time_limit(self, duration):
+    def set_session_time_limits(self, duration=None, interval=None):
         """ Sets the duration for the current or next session
 
         Parameters
         ----------
         duration: int
             Time, in minutes, that the session should last
+        interval: int
+            Time, in minutes, between consecutive sessions
         """
-
-        scheduler = states.TimeScheduler(duration=duration)
+        scheduler = states.TimeScheduler(duration=duration, interval=interval)
         self.session.schedulers.append(scheduler)
 
     def set_session_trial_limit(self, max_trials):
@@ -309,7 +483,9 @@ class BaseExp(object):
     def end(self):
         """ Finish the experiment and put the panel to sleep """
 
-        self.finshed = True
+        # Close the event handlers because they are in separate threads
+        events.close_handlers()
+        self.finished = True
         self.panel.sleep()
 
     def shape(self):
@@ -357,18 +533,14 @@ class BaseExp(object):
         logger.debug("Resetting panel")
         self.panel.reset()
 
-        # Save the current configurations
-        self.save()
-
         # This still seems very odd to me.
         logger.debug("Running shaping")
         self.shape()
 
         # Run until self.end() is called
-        while self.finished is False:
-            idle = states.Idle(experiment=self)
+        while self.finished == False:
             # The idle state checks whether it's time to sleep or time to start the session, so start in that state.
-            idle.start()
+            self._idle.start()
 
     ## Session Flow
     def session_pre(self):
@@ -376,10 +548,9 @@ class BaseExp(object):
         records the session start time.
         """
         logger.debug("Beginning session")
-        if self.block_queue is None:
-            logger.debug("Initializing BlockHandler")
-            self.block_queue = blocks.BlockHandler(self.blocks)
 
+        # Reinitialize the block queue
+        self.block_queue.reset()
         self.session_id += 1
         self.session_start_time = dt.datetime.now()
         self.panel.ready()
@@ -402,7 +573,7 @@ class BaseExp(object):
         self.panel.idle()
         self.session_end_time = dt.datetime.now()
         logger.info("Finishing session %d at %s" % (self.session_id, self.session_end_time.ctime()))
-        if self.session_id >= self.parameters.get("num_sessions", 1):
+        if self.session_id >= self.num_sessions:
             logger.info("Finished all sessions.")
             self.end()
 

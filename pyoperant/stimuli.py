@@ -127,7 +127,7 @@ class StimulusCondition(object):
                  file_pattern="*", shuffle=True, replacement=True):
 
         # These should do something better than printing and returning
-        if (files is None):
+        if files is None:
             if len(file_path) == 0:
                 raise IOError("No stimulus file_path provided!")
             if not os.path.exists(file_path):

@@ -4,7 +4,7 @@ import logging
 import datetime as dt
 from pyoperant import configure
 from pyoperant import stimuli
-from pyoperant.tlab.logging import PollingFilter, AudioPlaybackFilter
+from pyoperant.tlab.custom_logging import PollingFilter, AudioPlaybackFilter
 from pyoperant.behavior.go_no_go_interrupt import GoNoGoInterrupt
 from pyoperant.tlab import local_tlab
 

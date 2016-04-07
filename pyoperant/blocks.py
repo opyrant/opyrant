@@ -101,7 +101,8 @@ class Block(queues.BaseHandler):
             trial_index += 1
             trial = trials.Trial(index=trial_index,
                                  experiment=self.experiment,
-                                 condition=condition)
+                                 condition=condition,
+                                 block=self)
             yield trial
 
 
@@ -120,8 +121,12 @@ class BlockHandler(queues.BaseHandler):
     ----------
     block_index: int
         Index of the current block
+    blocks: list
+        A list of Block objects
     queue: queue generator or class instance
         The queue that will be iterated over.
+    queue_parameters: dict
+        All additional parameters used to initialize the queue.
 
     Example
     -------
@@ -135,10 +140,11 @@ class BlockHandler(queues.BaseHandler):
 
     def __init__(self, blocks, queue=queues.block_queue, **queue_parameters):
 
+        self.blocks = blocks
+        self.block_index = 0
         super(BlockHandler, self).__init__(queue=queue,
                                            items=blocks,
                                            **queue_parameters)
-        self.block_index = 0
 
     def __iter__(self):
 

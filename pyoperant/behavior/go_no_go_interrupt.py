@@ -39,43 +39,47 @@ class UnrewardedCondition(stimuli.StimulusConditionWav):
 class GoNoGoInterrupt(base.BaseExp):
     """A go no-go interruption experiment
 
-    Required Parameters
-    ----------
-    name
-    desc
-    subject
-    debug
-    experiment_path
-    session_schedule
-    session_duration
-    intersession_interval
-    num_sessions
+    Additional Parameters
+    ---------------------
+    reward_value: int
+        The value to pass as a reward (e.g. feed duration)
 
-    Attributes
-    ----------
-    req_panel_attr : list
-        list of the panel attributes that are required for this behavior
-    fields_to_save : list
-        list of the fields of the Trial object that will be saved
-    trials : list
-        all of the trials that have run
-    shaper : Shaper
-        the protocol for shaping
-    parameters : dict
-        all additional parameters for the experiment
-    data_csv : string
-        path to csv file to save data
-    reinf_sched : object
-        does logic on reinforcement
+    For all other parameters, see pyoperant.behavior.base.BaseExp
+
+    Required Panel Attributes
+    -------------------------
+    sleep - Puts the panel to sleep
+    reset - Sets the panel back to a nice initial state
+    ready - Prepares the panel to run the behavior (e.g. turn on the
+            response_port light and put the feeder down)
+    idle - Sets the panel into an idle state for when the experiment is not
+           running
+    reward - Method for supplying a reward to the subject. Should take a reward
+             value as an argument
+    response_port - The input through which the subject responds
+    speaker - A speaker for sound output
+
+    Fields To Save
+    --------------
+    session - The index of the current session
+    index - The index of the current trial
+    time - The start time of the trial
+    stimulus_name - The filename of the stimulus
+    condition_name - The condition of the stimulus
+    response - Whether or not there was a response
+    correct - Whether the response was correct
+    rt - If there was a response, the time from sound playback
+    max_wait - The duration of the sound and thus maximum rt to be counted as a
+               response.
     """
 
     req_panel_attr = ["sleep",
                       "reset",
-                      "speaker",
-                      "response_port",
-                      "reward",
                       "ready",
-                      "idle"]
+                      "idle",
+                      "reward",
+                      "response_port",
+                      "speaker"]
 
     fields_to_save = ['session',
                       'index',
@@ -89,13 +93,17 @@ class GoNoGoInterrupt(base.BaseExp):
                       'max_wait',
                       ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, reward_value=12, *args, **kwargs):
 
         super(GoNoGoInterrupt,  self).__init__(*args, **kwargs)
         self.start_immediately = False
+        self.reward_value = reward_value
 
     def trial_pre(self):
-        ''' this is where we initialize a trial'''
+        """ Initialize the trial and, if necessary, wait for a peck before
+        starting stimulus playback.
+        """
+
         logger.debug("Starting trial #%d" % self.this_trial.index)
         stimulus = self.this_trial.stimulus
         condition = self.this_trial.condition.name
@@ -106,26 +114,21 @@ class GoNoGoInterrupt(base.BaseExp):
         if not self.start_immediately:
             logger.debug("Begin polling for a response")
             self.panel.response_port.poll()
-            if (self.this_trial.index == 1) and ("session_duration" in self.parameters):
-                self.schedule_current_session()
 
     def stimulus_main(self):
-        ##play stimulus
-        logger.debug("stimulus_main")
+        """ Queue the stimulus and play it back """
+
+        logger.info("Trial %d - %s - %s - %s" % (
+                                     self.this_trial.index,
+                                     self.this_trial.time.strftime("%H:%M:%S"),
+                                     self.this_trial.condition.name,
+                                     self.this_trial.stimulus.name))
         self.panel.speaker.queue(self.this_trial.stimulus.file_origin)
-        logger.debug("wavfile queued")
-        self.this_trial.time = dt.datetime.now()
-        logger.info("Trial %d - %s - %s - %s" % (self.this_trial.index,
-                                                 self.this_trial.time.strftime("%H:%M:%S"),
-                                                 self.this_trial.condition.name,
-                                                 self.this_trial.stimulus.name))
-        # ipdb.set_trace()
-        self.panel.speaker.play() # already queued in stimulus_pre()
-        logger.debug("played stimulus")
+        self.this_trial.annotate(stimulus_time=dt.datetime.now())
+        self.panel.speaker.play()
 
     def response_main(self):
-
-        logger.debug("response_main")
+        """ Poll for an interruption for the duration of the stimulus. """
 
         self.this_trial.response_time = self.panel.response_port.poll(self.this_trial.stimulus.duration)
         logger.debug("Received peck or timeout. Stopping playback")
@@ -134,19 +137,21 @@ class GoNoGoInterrupt(base.BaseExp):
         logger.debug("Playback stopped")
 
         if self.this_trial.response_time is None:
-            self.this_trial.response = 0
-            self.start_immediately = False # Next trial will poll for a response before beginning
+            logger.debug("No peck was received")
+            self.this_trial.response = False
+            self.start_immediately = False  # Next trial will poll for a response before beginning
             self.this_trial.rt = np.nan
         else:
-            self.this_trial.response = 1
-            self.start_immediately = True # Next trial will begin immediately
-            self.this_trial.rt = self.this_trial.response_time - self.this_trial.time
+            logger.debug("Peck was received")
+            self.this_trial.response = True
+            self.start_immediately = True  # Next trial will begin immediately
+            self.this_trial.rt = self.this_trial.response_time - \
+                                 self.this_trial.annotations["stimulus_time"]
 
     def reward_main(self):
+        """ Reward a correct non-interruption """
 
-        self.this_trial.reward = True
-        logger.debug("reward_main")
-        value = self.parameters['reward_value']
+        value = self.parameters.get('reward_value', 12)
         logger.info("Supplying reward for %3.2f seconds" % value)
         reward_event = self.panel.reward(value=value)
         if isinstance(reward_event, dt.datetime): # There was a response during the reward period

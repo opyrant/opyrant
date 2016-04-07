@@ -18,9 +18,6 @@ def run(configuration_file):
     else:
         raise ValueError("Configuration file must be either yaml or json")
 
-    # Set up states
-
-
     # Set up subject
 
     # Set up panel

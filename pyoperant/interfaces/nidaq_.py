@@ -4,7 +4,7 @@ import nidaqmx
 import wave
 from pyoperant.interfaces import base_
 from pyoperant import utils, InterfaceError
-from pyoperant.events import events
+from pyoperant.events import events, EventDToAHandler
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def list_devices():
 # TODO: list_channels for specific device
 # TODO: list clock channels?
 
-class NIDAQmxError(Exception):
+class NIDAQmxError(InterfaceError):
     pass
 
 
@@ -90,6 +90,7 @@ class NIDAQmxInterface(base_.BaseInterface):
         self.device_name = device_name
         self.samplerate = samplerate
         self.clock_channel = clock_channel
+        self._digital_to_analog_interface = None
 
         self.tasks = dict()
         self.open()
@@ -235,14 +236,16 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         return True
 
-    def _config_write_analog(self, channel, min_val=-10.0, max_val=10.0,
-                             **kwargs):
+    def _config_write_analog(self, channel, d_to_a_channel=None, min_val=-10.0,
+                             max_val=10.0, **kwargs):
         """ Configure a channel or group of channels as an analog output
 
         Parameters
         ----------
         channel: string
             a channel or group of channels that will all be written to at the same time
+        d_to_a_channel: string
+            a channel to send digital-to-analog events
         min_val: float
             the minimum voltage that can be read
         max_val: float
@@ -255,6 +258,12 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         logger.debug("Configuring analog output on channel(s) %s" % str(channel))
         task = nidaqmx.AnalogOutputTask()
+        if d_to_a_channel is not None:
+            channel = [channel, d_to_a_channel]
+            logger.debug("Configuring digital to analog output as well.")
+            if self._digital_to_analog_interface is None:
+                self._digital_to_analog_interface = EventDToAHandler()
+
         task.create_voltage_channel(channel, min_val=min_val, max_val=max_val)
         task.configure_timing_sample_clock(source=self.clock_channel,
                                            rate=self.samplerate,
@@ -288,8 +297,8 @@ class NIDAQmxInterface(base_.BaseInterface):
         events.write(event)
         return values
 
-    def _write_analog(self, channel, values, is_blocking=False, event=None,
-                      **kwargs):
+    def _write_analog(self, channel, values, d_to_a_channel=None,
+                      is_blocking=False, event=None, **kwargs):
         """ Write a numpy array of float64 values to the buffer on a channel or
         group of channels
 
@@ -298,7 +307,9 @@ class NIDAQmxInterface(base_.BaseInterface):
         channel: string
             a channel or group of channels that will all be written to at the same time
         values: numpy array of float64 values
-            values to write to the hardware
+            values to write to the hardware. Should be of dimension nchannels x nsamples.
+        d_to_a_channel: string
+            a channel to send digital-to-analog events
         is_blocking: bool
             whether or not to block execution until all samples are written to the hardware
         event: dict
@@ -315,6 +326,12 @@ class NIDAQmxInterface(base_.BaseInterface):
         task = self.tasks[channel]
         task.stop()
         task.set_buffer_size(len(values))
+        if d_to_a_channel is not None:
+            bit_string = self._digital_to_analog_interface.to_bit_sequence(event)
+            if len(values.shape) == 1:
+                values = values.reshape((1, -1))
+            values = np.vstack([values, np.zeros((1, values.shape[1]))])
+            values[-1, :len(bit_string)] = bit_string
         task.write(values, auto_start=False)
         events.write(event)
         task.start()

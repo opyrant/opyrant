@@ -1,5 +1,6 @@
 import logging
-from pyoperant import queues, utils
+import datetime as dt
+from pyoperant import EndSession
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,8 @@ class Trial(object):
         Index of the trial
     experiment: instance of Experiment class
         The experiment of which this trial is a part
+    block: instance of Block class
+        The block that generated this trial
     condition: instance of StimulusCondition
         The condition for the current trial. Provides the trial with a stimulus,
         as well as reinforcement instructions
@@ -26,32 +29,48 @@ class Trial(object):
     stimulus_condition: instance of StimulusCondition
         The condition for the current trial. Provides the trial with a stimulus,
         as well as reinforcement instructions
+    time: datetime
+        The time the trial started
+    session: int
+        Index of the current session
 
     Methods
     -------
-    run()
-        Runs the trial
+    run() - Runs the trial
+    annotate() - Annotates the trial with key-value pairs
     """
     def __init__(self,
                  index=None,
                  experiment=None,
                  condition=None,
+                 block=None,
                  *args, **kwargs):
 
         super(Trial, self).__init__(*args, **kwargs)
-        self.index = index
 
         # Object references
         self.experiment = experiment
         self.condition = condition
+        self.block = block
+        self.annotations = dict()
 
-        # Trial statistics
+        # Trial properties
+        self.index = index
+        self.session = self.experiment.session_id
+        self.time = None  # Set just after trial_pre
+
+        # Likely trial details
         self.stimulus = None
         self.response = None
-        self.correct = None
         self.rt = None
+        self.correct = False
         self.reward = False
         self.punish = False
+
+    def annotate(self, **annotations):
+        """ Annotate the trial with key-value pairs """
+
+        self.annotations.update(annotations)
 
     def run(self):
         """ Runs the trial
@@ -75,6 +94,9 @@ class Trial(object):
         # Any pre-trial logging / computations
         self.experiment.trial_pre()
 
+        # Record the trial time
+        self.time = dt.datetime.now()
+
         # Perform stimulus playback
         self.experiment.stimulus_pre()
         self.experiment.stimulus_main()
@@ -89,12 +111,14 @@ class Trial(object):
         if self.response == self.condition.response:
             self.correct = True
             if self.condition.is_rewarded and self.block.reinforcement.consequate(self):
+                self.reward = True
                 self.experiment.reward_pre()
                 self.experiment.reward_main()
                 self.experiment.reward_post()
         else:
             self.correct = False
             if self.condition.is_punished and self.block.reinforcement.consequate(self):
+                self.punish = True
                 self.experiment.punish_pre()
                 self.experiment.punish_main()
                 self.experiment.punish_post()
@@ -107,3 +131,7 @@ class Trial(object):
 
         # Update session schedulers
         self.experiment.session.update()
+
+        if self.experiment.check_session_schedule() is False:
+            logger.debug("Session has run long enough. Ending")
+            raise EndSession

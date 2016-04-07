@@ -86,11 +86,11 @@ class Subject(object):
         """
         trial_dict = {}
         for field in self.datastore.fields:
-            try:
-                trial_dict[field] = getattr(trial,field)
-            except AttributeError:
+            if hasattr(trial, field):
+                trial_dict[field] = getattr(trial, field)
+            elif field in trial.annotations:
                 trial_dict[field] = trial.annotations[field]
-            except KeyError:
+            else:
                 trial_dict[field] = None
 
         logger.debug("Storing data for trial %d" % trial.index)

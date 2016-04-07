@@ -1,58 +1,55 @@
 ---
 # Experiment description
 name: Simple Stimulus Playback
-description: Loops through a directory of stimuli and plays them back, with some intertrial interval
+description: >
+    Loops through a directory of stimuli and plays them back, with some intertrial interval
 experimenter:
     name: First Last
     email: &def_email "test@somewhere.com"
-
-# Experiment properties
-subject_name: &subject Subject
-light_schedule:
-    - !!python/tuple ["05:00", "22:00"]
-idle_poll_interval: 60.0
 debug: false
+num_sessions: 1
+experiment_path: "/path/to/data/output"
 
-random_isi: true
-isi:
-    # min
-    - .5
-    # max
-    - 1.5
+# Behavior properties
+intertrial_interval: [0.5, 1.5]
 
-# Subject properties
+# States
+## Sleep state
+# sleep: !!python/object:pyoperant.states.Sleep
+#     schedulers:
+#         - !!python/object:pyoperant.states.TimeOfDayScheduler
+#             - ["22:00", "06:00"]
+## Session state
+session: !!python/object:pyoperant.states.Session
+#    schedulers:
+#        - !!python/object:pyoperant.states.CountScheduler
+#            max_trials: 100
+#        - !!python/object:pyoperant.states.TimeScheduler
+#            duration: 30
+
+idle: !!python/object:pyoperant.states.Idle
+    poll_interval: 60.0
+
+
+# Subject
 subject: !!python/object:pyoperant.subjects.Subject
-    name: *subject
-    datastore: csv
-    output_path: "/path/to/data/directory"
+    name: TestSubject
+#    filename: "testsubject_data.csv"
 
-# File paths
-experiment_path: "/path/to/data/directory"
+
+# Panel properties
+panel: !!python/object:pyoperant.panels.BasePanel {}
+
 
 # Stimulus conditions
 conditions:
-    - &playback !!python/object:pyoperant.stimuli.StimulusConditionWav
-      file_path: "/path/to/rewarded/stimuli"
+    - &Playback !!python/object:pyoperant.stimuli.StimulusConditionWav
+      name: "Playback"
+      file_path: "/path/to/stimuli"
 
-# Queues
-queues:
-    - &random !!python/name:pyoperant.queues.random_queue
-    - &block !!python/name:pyoperant.queues.block_queue
-
-blocks:
-    # Block number 1
-    - !!python/object:pyoperant.blocks.Block
-        conditions:
-            # Stimuli
-            - *playback
-        weights:
-            - 1.0
-        queue: *random
-        queue_parameters: {}
-
-block_queue: *block
-block_queue_parameters: {}
-block_weights: none
+# Block Handler
+block_queue: !!python/name:pyoperant.blocks.BlockHandler
+    queue: !!python/name:pyoperant.queues.block_queue
 
 # Log handler setup
 # Possible values are stream, file, email

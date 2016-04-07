@@ -5,7 +5,6 @@ import argparse
 from functools import wraps
 
 from pyoperant import hwio, components, panels, utils, InterfaceError
-from pyoperant.tlab import components_tlab, hwio_tlab
 from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
 
 logger = logging.getLogger(__name__)
@@ -124,6 +123,16 @@ class Panel123D(panels.BasePanel):
         self.house_light.off()
         self.feeder.down()
 
+    def ready(self):
+
+        self.feeder.down()
+        self.house_light.on()
+        self.peck_port.on()
+
+    def idle(self):
+
+        self.reset()
+
     @shutdown_on_error
     def test(self):
         self.reset()
@@ -225,16 +234,6 @@ class Panel123D(panels.BasePanel):
             if not repeat:
                 break
 
-    def ready(self):
-
-        self.feeder.down()
-        self.house_light.on()
-        self.peck_port.on()
-
-    def idle(self):
-
-        self.reset()
-
 
 class Box5(Panel123D):
 
@@ -270,10 +269,76 @@ class Box3(Panel123D):
 
 class Thing13(Panel123D):
 
+    _default_sound_file = "/home/tlee/code/neosound/data/zbsong.wav"
+
     def __init__(self, *args, **kwargs):
         super(Thing13, self).__init__(name="Tyler Laptop",
                                       arduino="/dev/ttyACM0",
                                       speaker="pulse", *args, **kwargs)
+
+class Panel131(panels.BasePanel):
+    """ The chronic recordings box in room 131
+
+    The speaker should probably be the address of the nidaq card
+
+    Parameters
+    ----------
+    name: string
+        Name of this box
+    speaker: string
+        Speaker device name for this box
+
+    Attributes
+    ----------
+
+    Examples
+    --------
+    """
+
+    _default_sound_file = "/home/fet/test_song.wav"
+
+    def __init__(self, speaker, name=None, *args, **kwargs):
+        super(Panel131, self).__init__(self, *args, **kwargs)
+        self.name = name
+
+        # Initialize interfaces
+        speaker_out = pyaudio_.PyAudioInterface(device_name=speaker)
+
+        # Create an audio output
+        audio_out = hwio.AudioOutput(interface=speaker_out)
+
+        # Add boolean hwios to inputs and outputs
+        self.inputs = []
+        self.outputs = []
+
+        # Set up components
+        self.speaker = components.Speaker(output=audio_out)
+
+    def reset(self):
+
+        pass
+
+    def sleep(self):
+
+        pass
+
+    def ready(self):
+
+        pass
+
+    def idle(self):
+
+        pass
+
+
+class Thing13_131(Panel131):
+
+    _default_sound_file = "/home/tlee/code/neosound/data/zbsong.wav"
+
+    def __init__(self, *args, **kwargs):
+
+        super(Thing13_131, self).__init__(name="Tyler's Laptop",
+                                          speaker="pulse")
 
 # Scripting methods
 def test_box(args):

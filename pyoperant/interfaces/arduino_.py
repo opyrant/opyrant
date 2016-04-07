@@ -241,6 +241,6 @@ class ArduinoInterface(base_.BaseInterface):
         return "".join([chr(channel), chr(value)])
 
 
-class ArduinoException(Exception):
+class ArduinoException(InterfaceError):
 
     pass
