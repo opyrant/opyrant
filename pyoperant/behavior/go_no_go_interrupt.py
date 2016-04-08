@@ -162,13 +162,6 @@ class GoNoGoInterrupt(base.BaseExp):
         if isinstance(reward_event, dt.datetime): # There was a response during the reward period
             self.start_immediately = True
 
-    def trial_post(self):
-        '''things to do at the end of a trial'''
-
-        logger.debug("trial_post")
-        if self.check_session_schedule() == False:
-            logger.debug("Session has run long enough. Ending")
-            raise EndSession
 
 if __name__ == "__main__":
 

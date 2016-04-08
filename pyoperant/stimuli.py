@@ -175,7 +175,7 @@ class StimulusCondition(object):
         else:
             index = self._index_list.pop(0)
 
-        logger.debug("Selected file %d of %d" % (index, len(self.files)))
+        logger.debug("Selected file %d of %d" % (index + 1, len(self.files)))
         return self.files[index]
 
 
