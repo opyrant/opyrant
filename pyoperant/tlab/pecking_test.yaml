@@ -14,7 +14,7 @@ stim_directory: &stims "/home/fet/stimuli/shaping"
 experiment_path: "/home/fet/data" # This is the root directory and will be appended with subject and date
 
 # Panel
-panel: !!python/object/apply:pyoperant.tlab.local_tlab.Box5 {}
+panel: !!python/object/apply:pyoperant.tlab.local_tlab.Box6 {}
 
 # Experiment properties
 reward_value: 12.0
