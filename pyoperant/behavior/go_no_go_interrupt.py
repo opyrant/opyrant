@@ -13,28 +13,33 @@ from pyoperant import components, utils, reinf, queues, configure, stimuli, subj
 
 logger = logging.getLogger(__name__)
 
-# TODO: Document classes and experiment methods
-# TODO: What do the classes override? What do they inherit and why?
 
 class RewardedCondition(stimuli.StimulusConditionWav):
-
+    """ Rewarded stimuli are rewarded if the subject does *not* respond (i.e.
+    No-Go stimuli).
+    """
     def __init__(self, file_path="", recursive=False):
-
         super(RewardedCondition, self).__init__(name="Rewarded",
                                                 response=False,
                                                 is_rewarded=True,
+                                                is_punished=False,
                                                 file_path=file_path,
                                                 recursive=recursive)
 
 
 class UnrewardedCondition(stimuli.StimulusConditionWav):
-
+    """ Unrewarded stimuli are not consequated and should be pecked through
+    (i.e. Go stimuli)
+    """
     def __init__(self, file_path="", recursive=False):
 
         super(UnrewardedCondition, self).__init__(name="Unrewarded",
                                                   response=True,
+                                                  is_rewarded=False,
+                                                  is_punished=False,
                                                   file_path=file_path,
                                                   recursive=recursive)
+
 
 class GoNoGoInterrupt(base.BaseExp):
     """A go no-go interruption experiment

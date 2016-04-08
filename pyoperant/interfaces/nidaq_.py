@@ -393,14 +393,17 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         self.wf = None
         self._wav_data = None
 
-    def _config_write_analog(self, channel, min_val=-10.0, max_val=10.0,
-                             **kwargs):
+    def _config_write_analog(self, channel, d_to_a_channel=None,
+                             min_val=-10.0, max_val=10.0, **kwargs):
         """ Configure a channel or group of channels as an analog output
 
         Parameters
         ----------
         channel: string
-            a channel or group of channels that will all be written to at the same time
+            a channel or group of channels that will all be written to at the
+            same time
+        d_to_a_channel: string
+            a channel to send digital-to-analog events
         min_val: float
             the minimum voltage that can be read
         max_val: float
@@ -410,13 +413,16 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         -------
         True if configuration succeeded
         """
-        super(NIDAQmxAudioInterface, self)._config_write_analog(channel,
-                                                                min_val=min_val,
-                                                                max_val=max_val,
-                                                                **kwargs)
+        super(NIDAQmxAudioInterface, self)._config_write_analog(
+                                                channel,
+                                                d_to_a_channel=d_to_a_channel,
+                                                min_val=min_val,
+                                                max_val=max_val,
+                                                **kwargs)
         self.stream = self.tasks.values()[0]
 
-    def _queue_wav(self, wav_file, start=False, **kwargs):
+    def _queue_wav(self, wav_file, start=False,
+                   d_to_a_channel=None, event=None, **kwargs):
 
         if self.wf is not None:
             self._stop_wav()
@@ -433,13 +439,21 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
             dtype = np.int32
         data = np.fromstring(self.wf.readframes(-1), dtype=dtype)
         self._wav_data = (data / max_val).astype(np.float64)
+        if d_to_a_channel is not None:
+            bit_string = self._digital_to_analog_interface.to_bit_sequence(event)
+            if len(self._wav_data.shape) == 1:
+                values = self._wav_data.reshape((1, -1))
+            else:
+                values = self._wav_data
+            self._wav_data = np.vstack([values, np.zeros((1, values.shape[1]))])
+            self._wav_data[-1, :len(bit_string)] = bit_string
         self._get_stream(start=start, **kwargs)
 
     def _get_stream(self, start=False, **kwargs):
         """
         """
 
-        self.stream.set_buffer_size(len(self._wav_data))
+        self.stream.set_buffer_size(self.wf.getnframes())
         self.stream.write(self._wav_data, auto_start=False)
         if start:
             self._play_wav(**kwargs)

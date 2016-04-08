@@ -8,48 +8,15 @@ experimenter:
     email: &def_email "test@somewhere.com"
 debug: false
 num_sessions: 1
-experiment_path: "/path/to/data/output"
+experiment_path: "/path/to/data/directory"
 
 # Behavior properties
 intertrial_interval: [0.5, 1.5]
+stimulus_directory: "/path/to/stimulus/directory"
 
-# States
-## Sleep state
-# sleep: !!python/object:pyoperant.states.Sleep
-#     schedulers:
-#         - !!python/object:pyoperant.states.TimeOfDayScheduler
-#             - ["22:00", "06:00"]
-## Session state
-session: !!python/object:pyoperant.states.Session
-#    schedulers:
-#        - !!python/object:pyoperant.states.CountScheduler
-#            max_trials: 100
-#        - !!python/object:pyoperant.states.TimeScheduler
-#            duration: 30
-
-idle: !!python/object:pyoperant.states.Idle
-    poll_interval: 60.0
-
-
-# Subject
-subject: !!python/object:pyoperant.subjects.Subject
-    name: TestSubject
-#    filename: "testsubject_data.csv"
-
-
-# Panel properties
-panel: !!python/object:pyoperant.panels.BasePanel {}
-
-
-# Stimulus conditions
-conditions:
-    - &Playback !!python/object:pyoperant.stimuli.StimulusConditionWav
-      name: "Playback"
-      file_path: "/path/to/stimuli"
-
-# Block Handler
-block_queue: !!python/name:pyoperant.blocks.BlockHandler
-    queue: !!python/name:pyoperant.queues.block_queue
+# Additional configuration
+subject_name: TestSubject
+panel: !!python/object/apply:pyoperant.panels.BasePanel {}
 
 # Log handler setup
 # Possible values are stream, file, email
@@ -62,22 +29,5 @@ log_handlers:
     # level: a python logging level, written as "!!python/name:logging.LEVEL"
     file:
         filename: "experiment.log"
-        level: !!python/name:logging.DEBUG
-    # email takes options of
-    # mailhost: where the email is sent from
-    # toaddrs: a list of addresses to send to
-    # fromaddr: the address to send from
-    # subject: The subject line
-    # credentials: not sure
-    # secure: not sure
-    # level: a python logging level, written as "!!python/name:logging.LEVEL"
-    email:
-        mailhost: localhost
-        toaddrs:
-            - *def_email
-        fromaddr: "Pyoperant <pyoperant@someemail.com"
-        subject: "pyoperant notice"
-        credentials: none
-        secure: none
-        level: !!python/name:logging.ERROR
+        level: !!python/name:logging.INFO
 ...

@@ -43,8 +43,8 @@ class PeckingTest(GoNoGoInterrupt):
 
         super(PeckingTest, self).__init__(*args, **kwargs)
 
-        if self.parameters.get("log_polling", False):
-            self.config_polling_log()
+        # if self.parameters.get("log_polling", False):
+        #     self.config_polling_log()
         if self.parameters.get("log_playback", False):
             self.config_playback_log()
 

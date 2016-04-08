@@ -1,5 +1,0 @@
----
-name: Box5
-arduino: "/dev/ttyArduino_box6"
-speaker: "speaker0"
-...
