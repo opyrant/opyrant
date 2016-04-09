@@ -292,7 +292,10 @@ class NIDAQmxInterface(base_.BaseInterface):
             raise NIDAQmxError("Channel(s) %s not yet configured" % str(channel))
 
         task = self.tasks[channel]
-        task.set_buffer_size(nsamples)
+        task.configure_timing_sample_clock(source=self.clock_channel,
+                                           rate=self.samplerate,
+                                           sample_mode="finite",
+                                           samples_per_channel=nsamples)
         values = task.read(nsamples)
         events.write(event)
         return values
@@ -325,13 +328,16 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         task = self.tasks[channel]
         task.stop()
-        task.set_buffer_size(len(values))
+        task.configure_timing_sample_clock(source=self.clock_channel,
+                                           rate=self.samplerate,
+                                           sample_mode="finite",
+                                           samples_per_channel=values.shape[0])
         if d_to_a_channel is not None:
             bit_string = self._digital_to_analog_interface.to_bit_sequence(event)
             if len(values.shape) == 1:
-                values = values.reshape((1, -1))
-            values = np.vstack([values, np.zeros((1, values.shape[1]))])
-            values[-1, :len(bit_string)] = bit_string
+                values = values.reshape((-1, 1))
+            values = np.hstack([values, np.zeros((values.shape[0], 1))])
+            values[:len(bit_string), -1] = bit_string
         task.write(values, auto_start=False)
         events.write(event)
         task.start()
@@ -442,18 +448,21 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         if d_to_a_channel is not None:
             bit_string = self._digital_to_analog_interface.to_bit_sequence(event)
             if len(self._wav_data.shape) == 1:
-                values = self._wav_data.reshape((1, -1))
+                values = self._wav_data.reshape((-1, 1))
             else:
                 values = self._wav_data
-            self._wav_data = np.vstack([values, np.zeros((1, values.shape[1]))])
-            self._wav_data[-1, :len(bit_string)] = bit_string
+            self._wav_data = np.hstack([values, np.zeros((values.shape[0], 1))])
+            self._wav_data[:len(bit_string), -1] = bit_string
         self._get_stream(start=start, **kwargs)
 
     def _get_stream(self, start=False, **kwargs):
         """
         """
 
-        self.stream.set_buffer_size(self.wf.getnframes())
+        self.stream.configure_timing_sample_clock(source=self.clock_channel,
+                                                  rate=self.samplerate,
+                                                  sample_mode="finite",
+                                                  samples_per_channel=self._wav_data.shape[0])
         self.stream.write(self._wav_data, auto_start=False)
         if start:
             self._play_wav(**kwargs)
@@ -479,4 +488,4 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         except AttributeError:
              self.wf = None
 
-        self.wav_data = None
+        self._wav_data = None

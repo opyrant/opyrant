@@ -5,7 +5,7 @@ import argparse
 from functools import wraps
 
 from pyoperant import hwio, components, panels, utils, InterfaceError
-from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
+from pyoperant.interfaces import pyaudio_, arduino_, nidaq_
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,8 @@ def shutdown_on_error(func):
     return wrapper
 
 
-class Panel123D(panels.BasePanel):
-    """ One of the boxes in 123D for running the pecking tests
+class Panel125(panels.BasePanel):
+    """ One of the boxes in 125 for running the pecking tests
 
     The arduino is configured with a baud rate of 19200 bits / second. It has an input for the pecking key on channel 4 and outputs for the pecking key, box light, and feeder on channels 8, 9, and 10, respectively.
 
@@ -58,7 +58,7 @@ class Panel123D(panels.BasePanel):
 
     def __init__(self, arduino, speaker, name=None, *args, **kwargs):
 
-        super(Panel123D, self).__init__(self, *args, **kwargs)
+        super(Panel125, self).__init__(self, *args, **kwargs)
         self.name = name
 
         # Initialize interfaces
@@ -235,7 +235,7 @@ class Panel123D(panels.BasePanel):
                 break
 
 
-class Box5(Panel123D):
+class Box5(Panel125):
 
     def __init__(self, *args, **kwargs):
         super(Box5, self).__init__(name="Box 5",
@@ -243,7 +243,7 @@ class Box5(Panel123D):
                                    speaker="speaker0", *args, **kwargs)
 
 
-class Box6(Panel123D):
+class Box6(Panel125):
 
     def __init__(self, *args, **kwargs):
         super(Box6, self).__init__(name="Box 6",
@@ -251,7 +251,7 @@ class Box6(Panel123D):
                                    speaker="speaker1", *args, **kwargs)
 
 
-class Box2(Panel123D):
+class Box2(Panel125):
 
     def __init__(self, *args, **kwargs):
         super(Box2, self).__init__(name="Box 2",
@@ -259,7 +259,7 @@ class Box2(Panel123D):
                                    speaker="speaker1", *args, **kwargs)
 
 
-class Box3(Panel123D):
+class Box3(Panel125):
 
     def __init__(self, *args, **kwargs):
         super(Box3, self).__init__(name="Box 3",
@@ -267,7 +267,7 @@ class Box3(Panel123D):
                                    speaker="speaker0", *args, **kwargs)
 
 
-class Thing13(Panel123D):
+class Thing13(Panel125):
 
     _default_sound_file = "/home/tlee/code/neosound/data/zbsong.wav"
 
@@ -275,70 +275,7 @@ class Thing13(Panel123D):
         super(Thing13, self).__init__(name="Tyler Laptop",
                                       arduino="/dev/ttyACM0",
                                       speaker="pulse", *args, **kwargs)
-
-class Panel131(panels.BasePanel):
-    """ The chronic recordings box in room 131
-
-    The speaker should probably be the address of the nidaq card
-
-    Parameters
-    ----------
-    name: string
-        Name of this box
-    speaker: string
-        Speaker device name for this box
-
-    Attributes
-    ----------
-
-    Examples
-    --------
-    """
-
-    _default_sound_file = "/home/fet/test_song.wav"
-
-    def __init__(self, speaker, name=None, *args, **kwargs):
-        super(Panel131, self).__init__(self, *args, **kwargs)
-        self.name = name
-
-        # Initialize interfaces
-        speaker_out = pyaudio_.PyAudioInterface(device_name=speaker)
-
-        # Create an audio output
-        audio_out = hwio.AudioOutput(interface=speaker_out)
-
-        # Add boolean hwios to inputs and outputs
-        self.inputs = []
-        self.outputs = []
-
-        # Set up components
-        self.speaker = components.Speaker(output=audio_out)
-
-    def reset(self):
-
-        pass
-
-    def sleep(self):
-
-        pass
-
-    def ready(self):
-
-        pass
-
-    def idle(self):
-
-        pass
-
-
-class Thing13_131(Panel131):
-
-    _default_sound_file = "/home/tlee/code/neosound/data/zbsong.wav"
-
-    def __init__(self, *args, **kwargs):
-
-        super(Thing13_131, self).__init__(name="Tyler's Laptop",
-                                          speaker="pulse")
+                                      
 
 # Scripting methods
 def test_box(args):
