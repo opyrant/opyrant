@@ -10,10 +10,51 @@ logger = logging.getLogger(__name__)
 
 
 def list_devices():
+    """ List the devices currently connected to the system. """
 
     return nidaqmx.System().devices
 
-# TODO: list_channels for specific device
+
+def list_analog_inputs():
+    """ List the analog inputs for each device """
+
+    channels = dict()
+    for dev in nidaqmx.System().devices:
+        channels[str(dev)] = dev.get_analog_input_channels()
+
+    return channels
+
+
+def list_analog_outputs():
+    """ List the analog outputs for each device """
+
+    channels = dict()
+    for dev in nidaqmx.System().devices:
+        channels[str(dev)] = dev.get_analog_output_channels()
+
+    return channels
+
+
+def list_boolean_inputs():
+    """ List the boolean inputs for each device """
+
+    channels = dict()
+    for dev in nidaqmx.System().devices:
+        channels[str(dev)] = dev.get_digital_input_channels()
+
+    return channels
+
+
+def list_boolean_outputs():
+    """ List the boolean outputs for each device """
+
+    channels = dict()
+    for dev in nidaqmx.System().devices:
+        channels[str(dev)] = dev.get_digital_output_channels()
+
+    return channels
+
+
 # TODO: list clock channels?
 
 class NIDAQmxError(InterfaceError):
