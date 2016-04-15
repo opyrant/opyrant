@@ -421,11 +421,11 @@ class AudioOutput(BaseIO):
         logger.debug("Configuring AudioOutput to write on interface % s" % self.interface)
         return self.interface._config_write_analog(**self.params)
 
-    def queue(self, wav_filename):
-        return self.interface._queue_wav(wav_filename)
+    def queue(self, wav_filename, event=None):
+        return self.interface._queue_wav(wav_filename, event=event, **self.params)
 
     def play(self, event=None):
-        return self.interface._play_wav(event=event)
+        return self.interface._play_wav(event=event, **self.params)
 
     def stop(self, event=None):
-        return self.interface._stop_wav(event=event)
+        return self.interface._stop_wav(event=event, **self.params)
