@@ -530,8 +530,9 @@ class Speaker(BaseComponent):
 
     def queue(self, wav_filename, metadata=None):
 
+        self.event["action"] = "queue"
         self.event["metadata"] = metadata
-        return self.output.queue(wav_filename)
+        return self.output.queue(wav_filename, event=self.event)
 
     def play(self):
 

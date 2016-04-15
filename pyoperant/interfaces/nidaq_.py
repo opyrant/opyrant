@@ -277,7 +277,8 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         return True
 
-    def _config_write_analog(self, channel, d_to_a_channel=None, min_val=-10.0,
+    def _config_write_analog(self, channel, d_to_a_channel=None,
+                             upsample_factor=1,min_val=-10.0,
                              max_val=10.0, **kwargs):
         """ Configure a channel or group of channels as an analog output
 
@@ -300,10 +301,10 @@ class NIDAQmxInterface(base_.BaseInterface):
         logger.debug("Configuring analog output on channel(s) %s" % str(channel))
         task = nidaqmx.AnalogOutputTask()
         if d_to_a_channel is not None:
-            channel = [channel, d_to_a_channel]
+            channel = nidaqmx.libnidaqmx.make_pattern([channel, d_to_a_channel])
             logger.debug("Configuring digital to analog output as well.")
             if self._digital_to_analog_interface is None:
-                self._digital_to_analog_interface = EventDToAHandler()
+                self._digital_to_analog_interface = EventDToAHandler(upsample_factor=upsample_factor)
 
         task.create_voltage_channel(channel, min_val=min_val, max_val=max_val)
         task.configure_timing_sample_clock(source=self.clock_channel,
@@ -493,7 +494,7 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
             else:
                 values = self._wav_data
             self._wav_data = np.hstack([values, np.zeros((values.shape[0], 1))])
-            self._wav_data[:len(bit_string), -1] = bit_string
+            self._wav_data[:len(bit_string), -1] = bit_string * 3.3
         self._get_stream(start=start, **kwargs)
 
     def _get_stream(self, start=False, **kwargs):
@@ -508,14 +509,14 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         if start:
             self._play_wav(**kwargs)
 
-    def _play_wav(self, is_blocking=False, event=None):
+    def _play_wav(self, is_blocking=False, event=None, **kwargs):
         logger.debug("Playing wavfile")
         events.write(event)
         self.stream.start()
         if is_blocking:
             self.wait_until_done()
 
-    def _stop_wav(self, event=None):
+    def _stop_wav(self, event=None, **kwargs):
         try:
             logger.debug("Attempting to close stream")
             events.write(event)

@@ -107,7 +107,7 @@ class PyAudioInterface(base_.AudioInterface):
             self.wf = None
         self.pa.terminate()
 
-    def _get_stream(self, start=False, event=None):
+    def _get_stream(self, start=False, event=None, **kwargs):
         """
         """
         def _callback(in_data, frame_count, time_info, status):
@@ -132,18 +132,18 @@ class PyAudioInterface(base_.AudioInterface):
         if start:
             self._play_wav(event=event)
 
-    def _queue_wav(self, wav_file, start=False, event=None):
+    def _queue_wav(self, wav_file, start=False, event=None, **kwargs):
         logger.debug("Queueing wavfile %s" % wav_file)
         self.wf = wave.open(wav_file)
         self.validate()
         self._get_stream(start=start, event=event)
 
-    def _play_wav(self, event=None):
+    def _play_wav(self, event=None, **kwargs):
         logger.debug("Playing wavfile")
         events.write(event)
         self.stream.start_stream()
 
-    def _stop_wav(self, event=None):
+    def _stop_wav(self, event=None, **kwargs):
         try:
             logger.debug("Attempting to close pyaudio stream")
             events.write(event)

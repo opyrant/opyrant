@@ -41,7 +41,8 @@ class Panel131(panels.BasePanel):
         # Create an audio output
         audio_out = hwio.AudioOutput(interface=speaker_out,
                                      params={"channel": speaker + "/" + channel,
-                                             "d_to_a_channel": speaker + "/" + "ao1"})
+                                             "d_to_a_channel": speaker + "/" + "ao1",
+                                             "upsample_factor": 1})
 
         # Add boolean hwios to inputs and outputs
         self.inputs = []

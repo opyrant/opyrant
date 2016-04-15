@@ -319,10 +319,8 @@ class EventDToAHandler(EventHandler):
         """
 
         key = (event["name"], event["action"], event["metadata"])
-        try:
+        if key in self.map_to_bit:
             return self.map_to_bit[key]
-        except KeyError:
-            pass
 
         if event["metadata"] is None:
             nbytes = self.action_bytes + self.name_bytes
