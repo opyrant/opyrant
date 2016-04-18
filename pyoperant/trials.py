@@ -1,6 +1,7 @@
 import logging
 import datetime as dt
 from pyoperant import EndSession
+from pyoperant.events import events
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,11 @@ class Trial(object):
         self.reward = False
         self.punish = False
 
+        # Trial event information
+        self.event = dict(name="Trial",
+                          action="",
+                          metadata="")
+
     def annotate(self, **annotations):
         """ Annotate the trial with key-value pairs """
 
@@ -93,6 +99,10 @@ class Trial(object):
 
         # Any pre-trial logging / computations
         self.experiment.trial_pre()
+
+        # Emit trial event
+        self.event.update(action="start", metadata=str(self.index))
+        events.write(self.event)
 
         # Record the trial time
         self.time = dt.datetime.now()
@@ -122,6 +132,10 @@ class Trial(object):
                 self.experiment.punish_pre()
                 self.experiment.punish_main()
                 self.experiment.punish_post()
+
+        # Emit trial end event
+        self.event.update(action="end", metadata=str(self.index))
+        events.write(self.event)
 
         # Finalize trial
         self.experiment.trial_post()

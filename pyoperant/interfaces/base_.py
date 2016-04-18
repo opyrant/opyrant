@@ -136,3 +136,21 @@ class AudioInterface(BaseInterface):
 
         if self.wf is None:
             raise InterfaceError("wavefile is not open, but it should be")
+
+    def _load_wav(self, filename):
+        """ Loads the .wav file and normalizes it according to its bit depth
+        """
+
+        self.wf = wave.open(filename)
+        self.validate()
+        sampwidth = self.wf.getsampwidth()
+        if sampwidth == 2:
+            max_val = 32768.0
+            dtype = np.int16
+        elif sampwidth == 4:
+            max_val = float(2 ** 32)
+            dtype = np.int32
+
+        data = np.fromstring(self.wf.readframes(-1), dtype=dtype)
+
+        return (data / max_val).astype(np.float64)

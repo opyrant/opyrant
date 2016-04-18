@@ -74,6 +74,10 @@ class NIDAQmxInterface(base_.BaseInterface):
         specified, then this should be the maximum allowed samplerate.
     clock_channel: string
         the channel name for an external clock signal (e.g. "/Dev1/PFI0")
+    analog_event_handler: instance of events.EventDToAHandler
+        an event handler for sending event information down an analog channel.
+        Should have a channel attribute. This can also be passed when you
+        configure the analog output.
 
     Attributes
     ----------
@@ -86,6 +90,8 @@ class NIDAQmxInterface(base_.BaseInterface):
         the channel name for an external clock signal (e.g. "/Dev1/PFI0")
     tasks: dict
         a dictionary of all configured tasks. Each task corresponds to inputs or outputs of the same type that will be read or written to together.
+    analog_event_handler: instance of events.EventDToAHandler
+        an event handler for sending event information down an analog channel.
 
     Methods
     -------
@@ -126,12 +132,13 @@ class NIDAQmxInterface(base_.BaseInterface):
     """
 
     def __init__(self, device_name, samplerate=30000,
-                 clock_channel=None, *args, **kwargs):
+                 analog_event_handler=None, clock_channel=None,
+                 *args, **kwargs):
         super(NIDAQmxInterface, self).__init__(*args, **kwargs)
         self.device_name = device_name
         self.samplerate = samplerate
         self.clock_channel = clock_channel
-        self._digital_to_analog_interface = None
+        self._analog_event_handler = analog_event_handler
 
         self.tasks = dict()
         self.open()
@@ -277,17 +284,16 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         return True
 
-    def _config_write_analog(self, channel, d_to_a_channel=None,
-                             upsample_factor=1,min_val=-10.0,
-                             max_val=10.0, **kwargs):
+    def _config_write_analog(self, channel, min_val=-10.0, max_val=10.0,
+                             **kwargs):
         """ Configure a channel or group of channels as an analog output
 
-        Parameters
+        Parameters))
         ----------
         channel: string
-            a channel or group of channels that will all be written to at the same time
-        d_to_a_channel: string
-            a channel to send digital-to-analog events
+            a channel or group of channels that will all be written to at the same
+        analog_event_handler: instance of events.EventDToAHandler
+            an event handler for sending event information down an analog channel. Should have a channel attribute.
         min_val: float
             the minimum voltage that can be read
         max_val: float
@@ -300,11 +306,14 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         logger.debug("Configuring analog output on channel(s) %s" % str(channel))
         task = nidaqmx.AnalogOutputTask()
-        if d_to_a_channel is not None:
-            channel = nidaqmx.libnidaqmx.make_pattern([channel, d_to_a_channel])
+        if self._analog_event_handler is None and \
+            analog_event_handler is not None:
+            if not hasattr(analog_event_handler, "channel"):
+                raise AttributeError("analog_event_handler must have a channel attribute")
+            channel = nidaqmx.libnidaqmx.make_pattern([channel,
+                                                       analog_event_handler.channel])
             logger.debug("Configuring digital to analog output as well.")
-            if self._digital_to_analog_interface is None:
-                self._digital_to_analog_interface = EventDToAHandler(upsample_factor=upsample_factor)
+            self._analog_event_handler = analog_event_handler
 
         task.create_voltage_channel(channel, min_val=min_val, max_val=max_val)
         task.configure_timing_sample_clock(source=self.clock_channel,
@@ -342,8 +351,8 @@ class NIDAQmxInterface(base_.BaseInterface):
         events.write(event)
         return values
 
-    def _write_analog(self, channel, values, d_to_a_channel=None,
-                      is_blocking=False, event=None, **kwargs):
+    def _write_analog(self, channel, values, is_blocking=False, event=None,
+                      **kwargs):
         """ Write a numpy array of float64 values to the buffer on a channel or
         group of channels
 
@@ -353,8 +362,6 @@ class NIDAQmxInterface(base_.BaseInterface):
             a channel or group of channels that will all be written to at the same time
         values: numpy array of float64 values
             values to write to the hardware. Should be of dimension nchannels x nsamples.
-        d_to_a_channel: string
-            a channel to send digital-to-analog events
         is_blocking: bool
             whether or not to block execution until all samples are written to the hardware
         event: dict
@@ -374,12 +381,22 @@ class NIDAQmxInterface(base_.BaseInterface):
                                            rate=self.samplerate,
                                            sample_mode="finite",
                                            samples_per_channel=values.shape[0])
-        if d_to_a_channel is not None:
-            bit_string = self._digital_to_analog_interface.to_bit_sequence(event)
+
+        if self._analog_event_handler is not None:
+            # Get the string of (scaled) bits from the event handler
+            bit_string = self._analog_event_handler.to_bit_sequence(event)
+
+            # multi-channel outputs need to be of shape nsamples x nchannels
             if len(values.shape) == 1:
                 values = values.reshape((-1, 1))
+
+            # Add a channel of all zeros
             values = np.hstack([values, np.zeros((values.shape[0], 1))])
+            # Place the bit string at the start
             values[:len(bit_string), -1] = bit_string
+
+        # Write the values to the nidaq buffer
+        # I think we might want to set layout='group_by_scan_number' in .write()
         task.write(values, auto_start=False)
         events.write(event)
         task.start()
@@ -441,7 +458,7 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         self.wf = None
         self._wav_data = None
 
-    def _config_write_analog(self, channel, d_to_a_channel=None,
+    def _config_write_analog(self, channel, analog_event_handler=None,
                              min_val=-10.0, max_val=10.0, **kwargs):
         """ Configure a channel or group of channels as an analog output
 
@@ -450,8 +467,8 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         channel: string
             a channel or group of channels that will all be written to at the
             same time
-        d_to_a_channel: string
-            a channel to send digital-to-analog events
+        analog_event_handler: instance of events.EventDToAHandler
+            an event handler for sending event information down an analog channel. Should have a channel attribute.
         min_val: float
             the minimum voltage that can be read
         max_val: float
@@ -463,53 +480,79 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         """
         super(NIDAQmxAudioInterface, self)._config_write_analog(
                                                 channel,
-                                                d_to_a_channel=d_to_a_channel,
+                                                analog_event_handler=analog_event_handler,
                                                 min_val=min_val,
                                                 max_val=max_val,
                                                 **kwargs)
         self.stream = self.tasks.values()[0]
 
-    def _queue_wav(self, wav_file, start=False,
-                   d_to_a_channel=None, event=None, **kwargs):
+    def _queue_wav(self, wav_file, start=False, event=None, **kwargs):
+        """ Queue the wav file for playback
+
+        Parameters
+        ----------
+        wav_file: string
+            Path to the wave file to load
+        start: bool
+            Whether or not to immediately start playback
+        event: dict
+            a dictionary of event information to emit just before playback
+        """
 
         if self.wf is not None:
             self._stop_wav()
 
-        logger.debug("Queueing wavfile %s" % wav_file)
-        self.wf = wave.open(wav_file)
-        self.validate()
-        sampwidth = self.wf.getsampwidth()
-        if sampwidth == 2:
-            max_val = 32768.0
-            dtype = np.int16
-        elif sampwidth == 4:
-            max_val = float(2 ** 32)
-            dtype = np.int32
-        data = np.fromstring(self.wf.readframes(-1), dtype=dtype)
-        self._wav_data = (data / max_val).astype(np.float64)
-        if d_to_a_channel is not None:
-            bit_string = self._digital_to_analog_interface.to_bit_sequence(event)
+        logger.debug("Queueing wavfile %s" % wav_file
+        self._wav_data = self._load_wav(wav_file)
+
+        if self._analog_event_handler is not None:
+            # Get the string of (scaled) bits from the event handler
+            bit_string = self._analog_event_handler.to_bit_sequence(event)
+
+            # multi-channel outputs need to be of shape nsamples x nchannels
+            if len(values.shape) == 1:
+                values = values.reshape((-1, 1))
+
             if len(self._wav_data.shape) == 1:
                 values = self._wav_data.reshape((-1, 1))
             else:
                 values = self._wav_data
+
+            # Add a channel of all zeros
             self._wav_data = np.hstack([values, np.zeros((values.shape[0], 1))])
-            self._wav_data[:len(bit_string), -1] = bit_string * 3.3
+            # Place the bit string at the start
+            self._wav_data[:len(bit_string), -1] = bit_string
         self._get_stream(start=start, **kwargs)
 
     def _get_stream(self, start=False, **kwargs):
-        """
+        """ Writes the stream to the nidaq buffer and optionally starts it.
+
+        Parameters
+        ----------
+        start: bool
+            Whether or not to immediately start playback
         """
 
         self.stream.configure_timing_sample_clock(source=self.clock_channel,
                                                   rate=self.samplerate,
                                                   sample_mode="finite",
                                                   samples_per_channel=self._wav_data.shape[0])
+        # I think we might want to set layout='group_by_scan_number' in .write()
         self.stream.write(self._wav_data, auto_start=False)
         if start:
             self._play_wav(**kwargs)
 
     def _play_wav(self, is_blocking=False, event=None, **kwargs):
+        """ Play the data that is currently in the buffer
+
+        Parameters
+        ----------
+        is_blocking: bool
+            Whether or not to play the sound in blocking mode
+        event: dict
+            a dictionary of event information to emit just before playback
+        """
+
         logger.debug("Playing wavfile")
         events.write(event)
         self.stream.start()
@@ -517,6 +560,14 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
             self.wait_until_done()
 
     def _stop_wav(self, event=None, **kwargs):
+        """ Stop the current playback and clear the buffer
+
+        Parameters
+        ----------
+        event: dict
+            a dictionary of event information to emit just before stopping
+        """
+
         try:
             logger.debug("Attempting to close stream")
             events.write(event)

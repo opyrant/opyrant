@@ -272,24 +272,32 @@ class EventDToAHandler(EventHandler):
         The number of bytes to use for any additional metadata.
     upsample_factor: int
         The factor by which the bit sequence should be upsampled.
+    scaling: float
+        A scaling factor to scale the analog representation of the digital signal (e.g. send out 3.3 Volts to pass to a digital input)
     component: string
         Optionally argument that allows one to only log events with the
         specified component name.
+
+    All additional key-value pairs are stored for use by the interface
 
     Methods
     -------
     to_bit_sequence(event) - Serializes the event details into a string of bits
     """
-    def __init__(self, name_bytes=4, action_bytes=4,
-                 metadata_bytes=16, upsample_factor=1, component=None):
+    def __init__(self, name_bytes=4, action_bytes=4, metadata_bytes=16,
+                 upsample_factor=1, scaling=1.0, component=None,
+                 **interface_params):
 
         self.name_bytes = name_bytes
         self.action_bytes = action_bytes
         self.metadata_bytes = metadata_bytes
         self.upsample_factor = upsample_factor
+        self.scaling = scaling
         self.component = component
         self.map_to_bit = dict()
         self.queue = Queue.Queue(maxsize=0)
+        for key, value in interface_params.items():
+            setattr(self, key, value)
 
     def filter(self, event):
         """ Always returns False, as this one should never be called by Events
@@ -319,31 +327,34 @@ class EventDToAHandler(EventHandler):
         """
 
         key = (event["name"], event["action"], event["metadata"])
+        # Check if the bit string is already stored
         if key in self.map_to_bit:
             return self.map_to_bit[key]
 
-        if event["metadata"] is None:
-            nbytes = self.action_bytes + self.name_bytes
-            metadata_array = []
-        else:
-            nbytes = self.metadata_bytes  + self.action_bytes + self.name_bytes
-            try:
-                metadata_array = np.fromstring(event["metadata"],
-                                               dtype=np.uint16).astype(np.uint8)[:self.metadata_bytes]
-            except TypeError:
-                metadata_array = np.array(map(ord,
-                                              event["metadata"].ljust(self.metadata_bytes)[:self.metadata_bytes]),
-                                          dtype=np.uint8)
+        trim = lambda ss, l: ss.ljust(l)[:l]
+        # Set up int8 arrays where strings are converted to integers using ord
+        name_array = np.array(map(ord, trim(event["name"], self.name_bytes)),
+                              dtype=np.uint8)
+        action_array = np.array(map(ord, trim(event["action"],
+                                              self.action_bytes)),
+                                dtype=np.uint8)
 
-        int8_array = np.zeros(nbytes, dtype="uint8")
-        int8_array[:self.name_bytes] = map(ord, event["name"].ljust(self.name_bytes)[:self.name_bytes])
-        int8_array[self.name_bytes:self.name_bytes + self.action_bytes] = map(ord, event["action"].ljust(self.action_bytes)[:self.action_bytes])
-        int8_array[self.name_bytes + self.action_bytes:] = metadata_array
+        # Add the metadata array if a value was passed
+        if event["metadata"] is not None:
+            metadata_array = np.array(map(ord, trim(event["metadata"],
+                                                    self.metadata_bytes)),
+                                      dtype=np.uint8)
+        else:
+            metadata_array = np.array([], dtype=np.uint8)
 
         sequence = ([True] +
-                    np.unpackbits(int8_array).astype(bool).tolist() +
+                    np.unpackbits(name_array).astype(bool).tolist() +
+                    np.unpackbits(action_array).astype(bool).tolist() +
+                    np.unpackbits(metadata_array).astype(bool).tolist() +
                     [False])
         sequence = np.repeat(sequence, self.upsample_factor).astype("float64")
+        sequence *= self.scaling
+
         self.map_to_bit[key] = sequence
 
         return sequence
