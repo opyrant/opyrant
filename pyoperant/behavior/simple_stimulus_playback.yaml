@@ -12,7 +12,10 @@ experiment_path: "/path/to/data/directory"
 
 # Behavior properties
 intertrial_interval: [0.5, 1.5]
-stimulus_directory: "/path/to/stimulus/directory"
+# a directory or a list of dictionaries with name and directory keys
+stimulus_directory:
+  - name: Playback
+    directory: "/path/to/stimulus/directory"
 
 # Additional configuration
 subject_name: TestSubject

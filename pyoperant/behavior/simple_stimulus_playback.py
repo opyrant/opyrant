@@ -3,7 +3,8 @@ import datetime as dt
 import numpy as np
 from pyoperant.behavior import base
 from pyoperant.errors import EndSession
-from pyoperant import utils, stimuli
+from pyoperant import utils, stimuli, queues
+from pyoperant import blocks as blocks_
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,8 @@ class SimpleStimulusPlayback(base.BaseExp):
     ---------------------
     intertrial_interval: float or 2-element list
         If the value is a float, then the intertrial interval is fixed. If it is a list, then the interval is taken as from a uniform random distribution between the first and second elements.
-    stimulus_directory: string
-        Full path to the stimulus directory. If given, a stimulus condition will be created and passed in to BaseExp.
+    stimulus_directory: string or list
+        Full path to the stimulus directory. If given, a stimulus condition will be created and passed in to BaseExp. Can also be a list of dictionaries with name and directory keys.
 
     For all other parameters, see pyoperant.behavior.base.BaseExp
 
@@ -52,19 +53,43 @@ class SimpleStimulusPlayback(base.BaseExp):
                       'intertrial_interval']
 
     def __init__(self, intertrial_interval=2.0, stimulus_directory=None,
-                 *args, **kwargs):
+                 queue=queues.random_queue, reinforcement=None,
+                 queue_parameters=None, *args, **kwargs):
 
-        conditions = kwargs.pop("conditions", list())
+        # let's parse any stimulus directories provided
         if stimulus_directory is not None:
-            condition = stimuli.StimulusConditionWav(name="Playback",
-                                                     file_path=stimulus_directory,
-                                                     is_rewarded=False,
-                                                     is_punished=False)
-            conditions.append(condition)
+            # Append to any existing blocks
+            blocks = kwargs.pop("blocks", list())
+
+            if queue_parameters is None:
+                queue_parameters = dict()
+
+            # If a path is given, convert it to the list of dictionaries
+            if isinstance(stimulus_directory, str):
+                stimulus_directory = [dict(name="Playback",
+                                           directory=stimulus_directory)]
+
+            for ii, stim_dict in enumeraten(stimulus_directory):
+                # Default name is Playback#
+                name = stim_dict.get("name", "Playback%d" % ii)
+                directory = stim_dict["directory"]
+                # Create a stimulus condition for this directory
+                condition = stimuli.StimulusConditionWav(name=name,
+                                                         file_path=directory,
+                                                         is_rewarded=False,
+                                                         is_punished=False,
+                                                         response=False)
+
+                # Create a block for this condition
+                blocks = blocks_.Block([condition],
+                                       queue=queue,
+                                       reinforcement=reinforcement,
+                                       **queue_parameters)
+                blocks.append(block)
 
         self.intertrial_interval = intertrial_interval
 
-        super(SimpleStimulusPlayback, self).__init__(conditions=conditions,
+        super(SimpleStimulusPlayback, self).__init__(blocks=blocks,
                                                      *args, **kwargs)
 
 
