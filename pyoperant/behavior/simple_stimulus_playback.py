@@ -69,7 +69,7 @@ class SimpleStimulusPlayback(base.BaseExp):
                 stimulus_directory = [dict(name="Playback",
                                            directory=stimulus_directory)]
 
-            for ii, stim_dict in enumeraten(stimulus_directory):
+            for ii, stim_dict in enumerate(stimulus_directory):
                 # Default name is Playback#
                 name = stim_dict.get("name", "Playback%d" % ii)
                 directory = stim_dict["directory"]
@@ -81,10 +81,10 @@ class SimpleStimulusPlayback(base.BaseExp):
                                                          response=False)
 
                 # Create a block for this condition
-                blocks = blocks_.Block([condition],
-                                       queue=queue,
-                                       reinforcement=reinforcement,
-                                       **queue_parameters)
+                block = blocks_.Block([condition],
+                                      queue=queue,
+                                      reinforcement=reinforcement,
+                                      **queue_parameters)
                 blocks.append(block)
 
         self.intertrial_interval = intertrial_interval
@@ -122,3 +122,6 @@ class SimpleStimulusPlayback(base.BaseExp):
 
         # Wait for stimulus to finish
         utils.wait(self.this_trial.stimulus.duration)
+
+        # Stop the sound
+        self.panel.speaker.stop()

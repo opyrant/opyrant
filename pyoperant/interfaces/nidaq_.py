@@ -284,8 +284,8 @@ class NIDAQmxInterface(base_.BaseInterface):
 
         return True
 
-    def _config_write_analog(self, channel, min_val=-10.0, max_val=10.0,
-                             **kwargs):
+    def _config_write_analog(self, channel, analog_event_handler=None,
+                             min_val=-10.0, max_val=10.0, **kwargs):
         """ Configure a channel or group of channels as an analog output
 
         Parameters))
@@ -502,7 +502,8 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
         if self.wf is not None:
             self._stop_wav()
 
-        logger.debug("Queueing wavfile %s" % wav_file
+        events.write(event)
+        logger.debug("Queueing wavfile %s" % wav_file)
         self._wav_data = self._load_wav(wav_file)
 
         if self._analog_event_handler is not None:
@@ -510,9 +511,6 @@ class NIDAQmxAudioInterface(NIDAQmxInterface, base_.AudioInterface):
             bit_string = self._analog_event_handler.to_bit_sequence(event)
 
             # multi-channel outputs need to be of shape nsamples x nchannels
-            if len(values.shape) == 1:
-                values = values.reshape((-1, 1))
-
             if len(self._wav_data.shape) == 1:
                 values = self._wav_data.reshape((-1, 1))
             else:

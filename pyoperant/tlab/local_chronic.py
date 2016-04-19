@@ -4,7 +4,7 @@ import logging
 import argparse
 from functools import wraps
 
-from pyoperant import hwio, components, panels, utils, InterfaceError
+from pyoperant import hwio, components, panels, utils, InterfaceError, events
 from pyoperant.interfaces import nidaq_
 
 logger = logging.getLogger(__name__)
@@ -38,11 +38,14 @@ class Panel131(panels.BasePanel):
         speaker_out = nidaq_.NIDAQmxAudioInterface(device_name=speaker,
                                                    clock_channel="/Dev1/PFI0")
 
+        # Create a digital to analog event handler
+        analog_event_handler = events.EventDToAHandler(channel=speaker + "/" + "ao1",
+                                                       scaling=3.3,
+                                                       metadata_bytes=40)
         # Create an audio output
         audio_out = hwio.AudioOutput(interface=speaker_out,
                                      params={"channel": speaker + "/" + channel,
-                                             "d_to_a_channel": speaker + "/" + "ao1",
-                                             "upsample_factor": 1})
+                                             "analog_event_handler": analog_event_handler})
 
         # Add boolean hwios to inputs and outputs
         self.inputs = []
@@ -51,7 +54,7 @@ class Panel131(panels.BasePanel):
         # Set up components
         self.speaker = components.Speaker(output=audio_out)
 
-    def reset(self):
+    def reset(self):  
 
         pass
 
