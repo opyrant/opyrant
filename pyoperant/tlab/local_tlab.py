@@ -5,10 +5,10 @@ import argparse
 from functools import wraps
 
 from pyoperant import hwio, components, panels, utils, InterfaceError
-from pyoperant.tlab import components_tlab, hwio_tlab
-from pyoperant.interfaces import pyaudio_, arduino_  # , avconv_
+from pyoperant.interfaces import pyaudio_, arduino_, nidaq_
 
 logger = logging.getLogger(__name__)
+
 
 def shutdown_on_error(func):
 
@@ -25,68 +25,74 @@ def shutdown_on_error(func):
     return wrapper
 
 
+class Panel125(panels.BasePanel):
+    """ One of the boxes in 125 for running the pecking tests
 
-class TLabPanel(panels.BasePanel):
+    The arduino is configured with a baud rate of 19200 bits / second. It has an input for the pecking key on channel 4 and outputs for the pecking key, box light, and feeder on channels 8, 9, and 10, respectively.
+
+    The speakers name should probably be "speaker0" or "speaker1" as they are set up to split the headphone out into right and left channels to drive two boxes independently.
+
+    Parameters
+    ----------
+    name: string
+        Name of this box
+    arduino: string
+        Path to the arduino for this box
+    speaker: string
+        Speaker device name for this box
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+    test()
+    test_audio()
+    calibrate()
+
+    Examples
+    --------
+    """
 
     _default_sound_file = "/home/fet/test_song.wav"
 
-    configuration = {"key_input": 4,
-                     "key_light": 8,
-                     "main_light": 9,
-                     "feeder": 10,
-                     }
-    baud_rate = 19200
+    def __init__(self, arduino, speaker, name=None, *args, **kwargs):
 
-    def __init__(self, configuration, *args, **kwargs):
-
-        super(TLabPanel, self).__init__(self, *args, **kwargs)
-
-        self.configuration = TLabPanel.configuration.copy()
-        self.configuration.update(configuration)
+        super(Panel125, self).__init__(self, *args, **kwargs)
+        self.name = name
 
         # Initialize interfaces
-        self.interfaces['arduino'] = arduino_.ArduinoInterface(device_name=self.configuration['arduino'],
-                                                                baud_rate=self.baud_rate)
-        for ii in xrange(60):
-            try:
-                self.interfaces['pyaudio'] = pyaudio_.PyAudioInterface(device_name=self.configuration['speaker'])
-                break
-            except InterfaceError:
-                if ii == 59:
-                    raise
-                else:
-                    utils.wait(1.0)
+        arduino = arduino_.ArduinoInterface(device_name=arduino,
+                                            baud_rate=19200)
+        headphone_out = pyaudio_.PyAudioInterface(device_name=speaker)
 
-        # self.interfaces['avconv'] = avconv_.AVConvInterface()
+        # Create input and output for the pecking key
+        button = hwio.BooleanInput(name="Pecking key input",
+                                   interface=arduino,
+                                   params=dict(channel=4, invert=True))
+        light = hwio.BooleanOutput(name="Pecking key light",
+                                   interface=arduino,
+                                   params=dict(channel=8))
+        # Create an output for the box's main light
+        main_light = hwio.BooleanOutput(name="Box light",
+                                        interface=arduino,
+                                        params=dict(channel=9))
+        # Create an output for the feeder
+        feeder = hwio.BooleanOutput(name="Feeder",
+                                    interface=arduino,
+                                    params=dict(channel=10))
+        # Create an audio output
+        audio_out = hwio.AudioOutput(interface=headphone_out)
 
-        # Create hardware inputs and outputs
-        self.inputs.append(hwio.BooleanInput(name="Pecking key input",
-                                             interface=self.interfaces['arduino'],
-                                             params={"channel": self.configuration["key_input"],
-                                                     "pullup": True}))
-
-
-        self.outputs.append(hwio.BooleanOutput(name="Pecking key light",
-                                               interface=self.interfaces['arduino'],
-                                               params={"channel": self.configuration["key_light"]}))
-        self.outputs.append(hwio.BooleanOutput(name="Main light",
-                                               interface=self.interfaces['arduino'],
-                                               params={"channel": self.configuration["main_light"]}))
-        self.outputs.append(hwio.BooleanOutput(name="Feeder",
-                                               interface=self.interfaces['arduino'],
-                                               params={"channel": self.configuration["feeder"]}))
-
+        # Add boolean hwios to inputs and outputs
+        self.inputs = [button]
+        self.outputs = [light, main_light, feeder]
 
         # Set up components
-        self.speaker = hwio.AudioOutput(interface=self.interfaces['pyaudio'])
-        # self.camera = hwio.CameraInput(name="Webcam",
-        #                                interface=self.interfaces['avconv'],
-        #                                params={'video_params':{},
-        #                                        'audio_params':{}}))
-
-        self.peck_port = components.PeckPort(IR=self.inputs[0], LED=self.outputs[0])
-        self.house_light = components.HouseLight(light=self.outputs[1])
-        self.feeder = components_tlab.HopperNoIR(solenoid=self.outputs[2])
+        self.speaker = components.Speaker(output=audio_out)
+        self.peck_port = components.PeckPort(IR=button, LED=light)
+        self.house_light = components.HouseLight(light=main_light)
+        self.feeder = components.Hopper(solenoid=feeder)
 
         # Translations
         self.response_port = self.peck_port
@@ -106,16 +112,26 @@ class TLabPanel(panels.BasePanel):
         pass
 
     def reset(self):
-        for output in self.outputs:
-            output.write(False)
+
+        self.peck_port.off()
         self.house_light.on()
         self.feeder.down()
 
     def sleep(self):
-        for output in self.outputs:
-            output.write(False)
+
+        self.peck_port.off()
         self.house_light.off()
         self.feeder.down()
+
+    def ready(self):
+
+        self.feeder.down()
+        self.house_light.on()
+        self.peck_port.on()
+
+    def idle(self):
+
+        self.reset()
 
     @shutdown_on_error
     def test(self):
@@ -185,7 +201,7 @@ class TLabPanel(panels.BasePanel):
 
         self.speaker.play()
         try:
-            while self.speaker.interface.stream.is_active():
+            while self.speaker.output.interface.stream.is_active():
                 utils.wait(0.1)
         except KeyboardInterrupt:
             pass
@@ -208,7 +224,7 @@ class TLabPanel(panels.BasePanel):
             self.speaker.play()
 
             try:
-                while self.speaker.interface.stream.is_active():
+                while self.speaker.output.interface.stream.is_active():
                     utils.wait(0.1)
             except KeyboardInterrupt:
                 return
@@ -218,78 +234,48 @@ class TLabPanel(panels.BasePanel):
             if not repeat:
                 break
 
-    def ready(self):
 
-        self.peck_port.on()
-
-    def idle(self):
-
-        self.peck_port.off()
-
-
-class Thing1(TLabPanel):
-
-    configuration = {"arduino": "/dev/ttyACM0",
-                     "speaker": "speaker0"}
+class Box5(Panel125):
 
     def __init__(self, *args, **kwargs):
+        super(Box5, self).__init__(name="Box 5",
+                                   arduino="/dev/ttyArduino_box5",
+                                   speaker="speaker0", *args, **kwargs)
 
-        super(Thing1, self).__init__(self.configuration, *args, **kwargs)
 
-
-class Thing2(TLabPanel):
-
-    configuration = {"arduino": "/dev/ttyUSB0",
-                     "speaker": "default"}
+class Box6(Panel125):
 
     def __init__(self, *args, **kwargs):
-
-        super(Thing2, self).__init__(self.configuration, *args, **kwargs)
-
-class Box5(TLabPanel):
-    # /dev/ttyACM0
-    configuration = {"arduino": "/dev/ttyArduino_box5",
-                     "speaker": "speaker0"}
-
-    def __init__(self, *args, **kwargs):
-        super(Box5, self).__init__(self.configuration, *args, **kwargs)
+        super(Box6, self).__init__(name="Box 6",
+                                   arduino="/dev/ttyArduino_box6",
+                                   speaker="speaker1", *args, **kwargs)
 
 
-class Box6(TLabPanel):
-    # /dev/ttyACM1
-    configuration = {"arduino": "/dev/ttyArduino_box6",
-                     "speaker": "speaker1"}
+class Box2(Panel125):
 
     def __init__(self, *args, **kwargs):
-        super(Box6, self).__init__(self.configuration, *args, **kwargs)
+        super(Box2, self).__init__(name="Box 2",
+                                   arduino="/dev/ttyArduino_box2",
+                                   speaker="speaker1", *args, **kwargs)
 
 
-class Box2(TLabPanel):
-    #/dev/ttyACM0
-    configuration = {"arduino": "/dev/ttyArduino_box2",
-                     "speaker": "speaker1"}
-
-    def __init__(self, *args, **kwargs):
-        super(Box2, self).__init__(self.configuration, *args, **kwargs)
-
-
-class Box3(TLabPanel):
-
-    configuration = {"arduino": "/dev/ttyArduino_box3",
-                     "speaker": "speaker0"}
+class Box3(Panel125):
 
     def __init__(self, *args, **kwargs):
-        super(Box3, self).__init__(self.configuration, *args, **kwargs)
+        super(Box3, self).__init__(name="Box 3",
+                                   arduino="/dev/ttyArduino_box3",
+                                   speaker="speaker0", *args, **kwargs)
 
 
-class Mac(TLabPanel):
+class Thing13(Panel125):
 
-    configuration = {"arduino": "/dev/tty.usbserial-A700619q",
-                     "speaker": "Built-in Output"}
+    _default_sound_file = "/home/tlee/code/neosound/data/zbsong.wav"
 
     def __init__(self, *args, **kwargs):
-        super(Mac, self).__init__(self.configuration, *args, **kwargs)
-
+        super(Thing13, self).__init__(name="Tyler Laptop",
+                                      arduino="/dev/ttyACM0",
+                                      speaker="pulse", *args, **kwargs)
+                                      
 
 # Scripting methods
 def test_box(args):
@@ -314,6 +300,7 @@ def calibrate_box(args):
 
     box = globals()["Box%d" % args.box]()
     box.calibrate()
+
 
 def shutdown_box(args):
 

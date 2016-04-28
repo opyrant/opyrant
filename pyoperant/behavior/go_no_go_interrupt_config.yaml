@@ -7,85 +7,79 @@
 # a template and possibly be used to provide the default values. If a section
 # requires specification of a python object, the formatting should go something
 # like this:
-# object_name: !!python/object:module.submodule
-#              param1: value1
-#              param2: value2
-#              ...
-#              paramn: valuen
+# object_name: !!python/object/apply:module.submodule.Class
+#   args: [list of arguments]
+#   kwds:
+#     param1: value1
+#     param2: value2
+#     ...
+#     paramn: valuen
 # You can refer to a previously defined object using "&some_name" before
 # defining the object and "*some_name" when referencing the object
 
 # Experiment description
 name: Go No-Go Interruption
-description: Runs a Go No-Go Interruption task
+description: >
+    Runs a Go No-Go Interruption experiment
 experimenter:
     name: First Last
     email: &def_email "test@somewhere.com"
 
-# Experiment properties
-subject_name: &subect Subject
-light_schedule:
-    - !!python/tuple ["05:00", "22:00"]
-idle_poll_interval: 60.0
-debug: false
-
-# Behavior properties
-reward_value: 10.0
-
-# Session details
-num_sessions: 1
-session_schedule:
-    - !!python/tuple ["05:00", "22:00"]
-shape: false
-
-# Subject properties
-subject: !!python/object:pyoperant.subjects.Subject
-    name: *subject
-    datastore: csv
-    output_path: "/path/to/data/directory"
-
-# Panel properties
-panel: !!python/object:pyoperant.panels.BasePanel {}
-
 # File paths
 experiment_path: "/path/to/data/directory"
 
+# Verbose logging
+debug: false
+
+# Number of sessions to run
+num_sessions: 1
+
+# Behavior properties
+reward_value: 12.0
+
+# Subject
+subject_name: TestSubject
+
+# Panel properties
+panel: !!python/object/apply:pyoperant.panels.BasePanel {}
+
 # Stimulus conditions
 conditions:
-    - &rewarded !!python/object:pyoperant.behavior.go_no_go_interrupt.RewardedCondition
-      file_path: "/path/to/rewarded/stimuli"
-    - &unrewarded !!python/object:pyoperant.behavior.go_no_go_interrupt.UnrewardedCondition
-      file_path: "/path/to/unrewarded/stimuli"
+    - &NoGo !!python/object/apply:pyoperant.stimuli.StimulusConditionWav
+      kwds:
+        name: "No-Go"
+        file_path: "/path/to/nogo/stimuli"
+        response: false
+        is_rewarded: true
+        is_punished: false
+    - &Go !!python/object:pyoperant.stimuli.StimulusConditionWav
+      kwds:
+        name: "Go"
+        file_path: "/path/to/go/stimuli"
+        response: true
+        is_rewarded: false
+        is_punished: false
 
-# Queues
-queues:
-    - &random !!python/name:pyoperant.queues.random_queue
-    - &block !!python/name:pyoperant.queues.block_queue
 
-# Reinforcement schedules
-reinforcement:
-    - &continuous !!python/object:pyoperant.reinf.ContinuousReinforcement {}
-    - &fixed_ratio !!python/object:pyoperant.reinf.FixedRatioSchedule {}
-
-# Block properties
+# Blocks
 blocks:
     # Block number 1
-    - !!python/object:pyoperant.blocks.Block
-        conditions:
-            # Rewarded stimuli
-            - *rewarded
-            # Unrewarded stimuli
-            - *unrewarded
-        weights:
+    - !!python/object/apply:pyoperant.blocks.Block
+        kwds:
+          conditions:
+            # NoGo stimuli
+            - *NoGo
+            # Go stimuli
+            - *Go
+          queue: !!python/name:pyoperant.queues.random_queue
+          # Weights for random queue
+          weights:
             - 0.2
             - 0.8
-        queue: *random
-        queue_parameters: {}
-        reinforcement: *continuous
+          reinforcement: !!python/object/apply:pyoperant.reinf.ContinuousReinforcement {}
 
-block_queue: *block
-block_queue_parameters: {}
-block_weights: none
+# Block Handler
+block_queue: !!python/name:pyoperant.queues.block_queue
 
 # Log handler setup
 # Possible values are stream, file, email
@@ -99,21 +93,4 @@ log_handlers:
     file:
         filename: "experiment.log"
         level: !!python/name:logging.DEBUG
-    # email takes options of
-    # mailhost: where the email is sent from
-    # toaddrs: a list of addresses to send to
-    # fromaddr: the address to send from
-    # subject: The subject line
-    # credentials: not sure
-    # secure: not sure
-    # level: a python logging level, written as "!!python/name:logging.LEVEL"
-    email:
-        mailhost: localhost
-        toaddrs:
-            - *def_email
-        fromaddr: "Pyoperant <pyoperant@someemail.com"
-        subject: "pyoperant notice"
-        credentials: none
-        secure: none
-        level: !!python/name:logging.ERROR
 ...

@@ -4,11 +4,11 @@ import wave
 import logging
 import random
 from contextlib import closing
-from pyoperant.utils import Event
+from pyoperant.utils import Event, filter_files
 
 logger = logging.getLogger(__name__)
 
-# TODO: Document these. What are they? What else might we want?
+# TODO: Integrate this concept of "event" with the one in events.py
 
 class Stimulus(Event):
     """docstring for Stimulus"""
@@ -16,6 +16,7 @@ class Stimulus(Event):
         super(Stimulus, self).__init__(*args, **kwargs)
         if self.label=='':
             self.label = 'stimulus'
+
 
 class AuditoryStimulus(Stimulus):
     """docstring for AuditoryStimulus"""
@@ -51,96 +52,145 @@ class AuditoryStimulus(Stimulus):
 
 
 class StimulusCondition(object):
+    """ Class to represent a single stimulus condition for an operant
+    conditioning experiment. The name parameter should be meaningful, as it will
+    be stored with the trial data. The booleans "is_rewarded" and "is_punished"
+    can be used to state if a stimulus should consequated according to the
+    experiment's reinforcement schedule.
 
-    def __init__(self, name="", response=None, is_rewarded=False, is_punished=False,
-                 file_path="", recursive=False, file_pattern="*"):
+    Parameters
+    ----------
+    name: string
+        Name of the stimulus condition used in data storage
+    response: string, int, or bool
+        The value of the desired response. Used to determine if the subject's
+        response was correct. (e.g. "left", True)
+    is_rewarded: bool
+        Whether or not a correct response should be rewarded
+    is_punished: bool
+        Whether or not an incorrect response should be punished
+    files: list
+        A list of files to use for the condition. If files is omitted, the list
+        will be discovered using the file_path, file_pattern, and recursive
+        parameters.
+    file_path: string
+        Path to directory where stimuli are stored
+    recursive: bool
+        Whether or not to search file_path recursively
+    file_pattern: string
+        A glob pattern to filter files by
+    replacement: bool
+        Whether individual stimuli should be sampled with replacement
+    shuffle: bool
+        Whether the list of files should be shuffled before sampling.
+
+    Attributes
+    ----------
+    name: string
+        Name of the stimulus condition used in data storage
+    response: string, int, or bool
+        The value of the desired response. Used to determine if the subject's
+        response was correct. (e.g. "left", True)
+    is_rewarded: bool
+        Whether or not a correct response should be rewarded
+    is_punished: bool
+        Whether or not an incorrect response should be punished
+    files: list
+        All of the matching files found
+    replacement: bool
+        Whether individual stimuli should be sampled with replacement
+    shuffle: bool
+        Whether the list of files should be shuffled before sampling.
+
+    Methods
+    -------
+    get()
+
+    Examples
+    --------
+    # Get ".wav" files for a "go" condition of a "Go-NoGo" experiment
+    condition = StimulusCondition(name="Go",
+                                  response=True,
+                                  is_rewarded=True,
+                                  is_punished=True,
+                                  file_path="/path/to/stimulus_directory",
+                                  recursive=True,
+                                  file_pattern="*.wav",
+                                  replacement=True)
+
+    # Get a wavefile
+    wavefile = condition.get()
+    """
+
+    def __init__(self, name="", response=None, is_rewarded=True,
+                 is_punished=True, files=None, file_path="", recursive=False,
+                 file_pattern="*", shuffle=True, replacement=True):
 
         # These should do something better than printing and returning
-        if not file_path:
-            raise IOError("No stimulus file_path provided!")
-
-        if not os.path.exists(file_path):
-            raise IOError("Stimulus file_path does not exist! %s" % file_path)
+        if files is None:
+            if len(file_path) == 0:
+                raise IOError("No stimulus file_path provided!")
+            if not os.path.exists(file_path):
+                raise IOError("Stimulus file_path does not exist! %s" % file_path)
 
         self.name = name
         self.response = response
         self.is_rewarded = is_rewarded
         self.is_punished = is_punished
+        self.shuffle = shuffle
+        self.replacement = replacement
 
-        self.files = list()
-        self.file_path = file_path
-        self.recursive = recursive
-        self.file_pattern = file_pattern
-        self.filter_files()
+        if files is None:
+            self.files = filter_files(file_path,
+                                      file_pattern=file_pattern,
+                                      recursive=recursive)
+        else:
+            self.files = files
+
+        self._index_list = range(len(self.files))
+        if self.shuffle:
+            random.shuffle(self._index_list)
 
         logger.debug("Created new condition: %s" % self)
 
     def __str__(self):
 
         return "".join(["Condition %s: " % self.name,
-                        "Rewarded = %s, " % self.is_rewarded,
-                        "Punished = %s, " % self.is_punished,
                         "# files = %d" % len(self.files)])
 
-    def filter_files(self):
+    def get(self):
+        """ Gets a single file from this condition's list of files. If
+        replacement is True, choose a file randomly with replacement. If
+        replacement is False, then return files in their (possibly shuffled)
+        order.
+        """
 
-        for rootdir, dirname, fnames in os.walk(self.file_path):
-            matches = fnmatch.filter(fnames, self.file_pattern)
-            self.files.extend(os.path.join(rootdir, fname) for fname in matches)
-            if not self.recursive:
-                dirname[:] = list()
+        if len(self._index_list) == 0:
+            self._index_list = range(len(self.files))
+            if self.shuffle:
+                random.shuffle(self._index_list)
 
-    def get(self, replacement=True):
-
-        index = random.choice(range(len(self.files)))
-        logger.debug("Selected file %d of %d" % (index, len(self.files)))
-        if replacement:
-            return self.files[index]
+        if self.replacement is True:
+            index = random.choice(self._index_list)
         else:
-            return self.files.pop(index)
+            index = self._index_list.pop(0)
+
+        logger.debug("Selected file %d of %d" % (index + 1, len(self.files)))
+        return self.files[index]
 
 
 class StimulusConditionWav(StimulusCondition):
+    """ Modifies StimulusCondition to only include .wav files. For usage
+    information see StimulusCondition.
+    """
 
-    def __init__(self, name="", response=None, is_rewarded=False, is_punished=False,
-                 file_path="", recursive=False):
+    def __init__(self, *args, **kwargs):
 
-        super(StimulusConditionWav, self).__init__(name=name,
-                                                   response=response,
-                                                   is_rewarded=is_rewarded,
-                                                   is_punished=is_punished,
-                                                   file_path=file_path,
-                                                   recursive=recursive,
-                                                   file_pattern="*.wav")
+        super(StimulusConditionWav, self).__init__(file_pattern="*.wav",
+                                                   *args, **kwargs)
 
-    def get(self, replacement=True):
-
-        wavfile = super(StimulusConditionWav, self).get(replacement=replacement)
+    def get(self):
+        """ Gets an AuditoryStimulus instance from a chosen .wav file """
+        wavfile = super(StimulusConditionWav, self).get()
 
         return AuditoryStimulus.from_wav(wavfile)
-
-
-class NonrandomStimulusConditionWav(StimulusConditionWav):
-
-    def __init__(self, name="", response=None, is_rewarded=False, is_punished=False,
-                 file_path="", recursive=False):
-
-        super(StimulusConditionWav, self).__init__(name=name,
-                                                   response=response,
-                                                   is_rewarded=is_rewarded,
-                                                   is_punished=is_punished,
-                                                   file_path=file_path,
-                                                   recursive=recursive)
-
-        self.index_order = list()
-
-    def get(self, shuffle=True):
-
-        if len(self.index_order) == 0:
-            self.index_order = range(len(self.files))
-            if shuffle:
-                random.shuffle(self.index_order)
-
-        index = self.index_order.pop(0)
-
-        return AuditoryStimulus.from_wav(self.files[index])

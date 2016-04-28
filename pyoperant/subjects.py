@@ -5,67 +5,153 @@ logger = logging.getLogger(__name__)
 
 
 class Subject(object):
+    """ Class which holds information about the subject currently running the
+    experiment
 
-    def __init__(self, name=None, experiment=None,
-                 datastore="csv", output_path=None,
-                 filename=""):
+    Parameters
+    ----------
+    name: string
+        The name of the subject
+    filename: string
+        The name of the output file. The extension is used to determine the
+        datastore type.
+
+    Attributes
+    ----------
+    name: string
+        The name of the subject
+    filename: string
+        The name of the output file
+    datastore: Store object instance
+        The datastore object in use
+
+    Methods
+    -------
+    create_datastore(fields)
+        Creates a datastore according to filename's extension
+    store_data(trial)
+        Stores a trial's data in the datastore
+    """
+
+    def __init__(self, name=None, filename=""):
 
         logger.debug("Creating subject object for %s" % name)
         self.name = name
-        self.experiment = experiment
-        self.datastore = datastore
-        self.output_path = output_path
         self.filename = filename
+        logger.info("Created subject object with name %s" % self.name)
+        self.datastore = None
 
-        self.data = list()
-        logger.info("Created subject object with name %s" % self.datastore)
+    def create_datastore(self, fields):
+        """ Creates a datastore object to store trial data
 
-    def create_datastore(self):
+        Parameters
+        ----------
+        fields: list
+            A list of field names to store from the trial object
 
-        if not self.filename:
-            self.filename = "%s_trialdata_%s.%s" % (self.name, self.experiment.timestamp, self.datastore)
-        self.filename = os.path.join(self.experiment.parameters["experiment_path"], self.filename)
-        if self.datastore == "csv":
-            self.datastore = CSVStore(self.experiment.fields_to_save, self.filename)
-        logger.info("Created datastore %s for subject %s" % (self.datastore, self.name))
+        Returns
+        -------
+        bool
+            True if the creation was successful
 
-    def store_data(self, trial=None):
+        Raises
+        ------
+        ValueError
+            If filename extension is of unknown type
+        """
+        ext = os.path.splitext(self.filename)[1].lower()
+        if ext == ".csv":
+            self.datastore = CSVStore(fields, self.filename)
+        else:
+            raise ValueError("Extension %s is of unknown type" % ext)
 
-        if trial is None:
-            trial = self.experiment.this_trial
+        logger.info("Created datastore %s for subject %s" % (self.datastore,
+                                                             self.name))
 
+        return True
+
+    def store_data(self, trial):
+        """ Stores the trial data in the datastore
+
+        Parameters
+        ----------
+        trial: instance of Trial
+            The trial to store. It should have all fields used in creation of
+            the datastore as attributes or annotations.
+
+        Returns
+        -------
+        bool
+            True if store succeeded
+        """
         trial_dict = {}
-        for field in self.experiment.fields_to_save:
-            try:
-                trial_dict[field] = getattr(trial,field)
-            except AttributeError:
+        for field in self.datastore.fields:
+            if hasattr(trial, field):
+                trial_dict[field] = getattr(trial, field)
+            elif field in trial.annotations:
                 trial_dict[field] = trial.annotations[field]
-            except KeyError:
+            else:
                 trial_dict[field] = None
 
         logger.debug("Storing data for trial %d" % trial.index)
         return self.datastore.store(trial_dict)
 
-class CSVStore(object):
 
-    def __init__(self, fields_to_save, filename):
+class CSVStore(object):
+    """ Class that wraps storing trial data in a CSV file
+
+    Parameters
+    ----------
+    fields: list
+        A list of columns for the CSV file
+    filename: string
+        Full path to the csv file. Appends to the file if it already exists.
+
+    Attributes
+    ----------
+    fields: list
+        A list of columns for the CSV file
+    filename: string
+        Full path to the csv file
+
+    Methods
+    -------
+    store(data)
+        Appends data to the CSV file
+    """
+    def __init__(self, fields, filename):
 
         self.filename = filename
-        self.fields_to_save = fields_to_save
+        self.fields = fields
 
-        with open(self.filename, 'wb') as data_fh:
+        with open(self.filename, 'ab') as data_fh:
             trialWriter = csv.writer(data_fh)
-            trialWriter.writerow(self.fields_to_save)
+            trialWriter.writerow(self.fields)
 
     def __str__(self):
 
-        return "CSVStore: filename = %s, fields = %s" % (self.filename, ", ".join(self.fields_to_save))
+        return "CSVStore: filename = %s, fields = %s" % (self.filename,
+                                                         ", ".join(self.fields))
 
     def store(self, data):
-        '''write data results to CSV'''
+        """ Appends the data to the CSV file
 
-        with open(self.filename,'ab') as data_fh:
-            trialWriter = csv.DictWriter(data_fh, fieldnames=self.fields_to_save, extrasaction='ignore')
+        Parameters
+        ----------
+        data: dictionary
+            The data to store. The keys should match the fields specified when
+            creating the CSVStore.
+
+        Returns
+        -------
+        bool
+            True if store succeeded
+        """
+
+        with open(self.filename, 'ab') as data_fh:
+            trialWriter = csv.DictWriter(data_fh,
+                                         fieldnames=self.fields,
+                                         extrasaction='ignore')
             trialWriter.writerow(data)
 
         return True

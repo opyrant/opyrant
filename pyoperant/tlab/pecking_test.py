@@ -1,52 +1,68 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 import os
 import logging
 import datetime as dt
 from pyoperant import configure
 from pyoperant import stimuli
-from pyoperant.tlab.polling_filter import PollingFilter, AudioPlaybackFilter
+from pyoperant.tlab.custom_logging import PollingFilter, AudioPlaybackFilter
 from pyoperant.behavior.go_no_go_interrupt import GoNoGoInterrupt
 from pyoperant.tlab import local_tlab
 
 logger = logging.getLogger(__name__)
 
-# TODO: Clean up method to run pecking test. Which file should be run???
-# TODO: Document methods and classes
 
-class ProbeCondition(stimuli.NonrandomStimulusConditionWav):
+class ProbeCondition(stimuli.StimulusConditionWav):
+    """ Probe stimuli are not consequated and should be sampled as evenly as
+    possible. This is done by setting replacement to False and shuffle to True.
+    """
 
-    def __init__(self, file_path="", recursive=False):
+    def __init__(self, name="Probe",
+                 response=False,
+                 is_rewarded=False,
+                 is_punished=False,
+                 replacement=False,
+                 shuffle=True,
+                 *args, **kwargs):
 
-        super(ProbeCondition, self).__init__(name="Probe",
-                                             response=False,
-                                             is_rewarded=False,
-                                             file_path=file_path,
-                                             recursive=recursive)
+        super(ProbeCondition, self).__init__(name=name,
+                                             response=response,
+                                             is_rewarded=is_rewarded,
+                                             is_punished=is_punished,
+                                             replacement=replacement,
+                                             shuffle=shuffle,
+                                             *args, **kwargs)
 
 class PeckingTest(GoNoGoInterrupt):
-    # Additional configurations:
-    # log_polling = (True / False)
-    # log_polling_file = (filename)
-    # log_playback = (True / False)
-    # log_playback_file = (filename)
+    """A go no-go interruption experiment for the Theunissen lab
 
+    Additional Parameters
+    ---------------------
+    log_polling: bool
+        Whether to log polling of the pecking key (value every ~100 ms)
+    log_polling_file: string
+        Filename for the polling log
+    log_playback: bool
+        Whether to log explicitly stimulus playback times (probably obsolete)
+    log_playback_file: string
+        Filename for playback log
+
+    For all other parameters, see pyoperant.behavior.base.BaseExp and
+    pyoperant.behavior.GoNoGoInterrupt
+    """
     def __init__(self, *args, **kwargs):
 
         super(PeckingTest, self).__init__(*args, **kwargs)
 
-        if self.parameters.get("log_polling", False):
-            self.config_polling_log()
+        # if self.parameters.get("log_polling", False):
+        #     self.config_polling_log()
         if self.parameters.get("log_playback", False):
             self.config_playback_log()
 
     def config_polling_log(self):
 
-        if "log_polling_file" in self.parameters:
-            filename = os.path.join(self.parameters["experiment_path"],
-                                    self.parameters["log_polling_file"])
-        else:
-            filename = os.path.join(self.parameters["experiment_path"],
-                                    "keydata.log")
+        filename = self.parameters.get("log_polling_file", "keydata.log")
+        if len(os.path.split(filename)[0]) == 0:
+            filename = os.path.join(self.experiment_path, filename)
 
         polling_handler = logging.FileHandler(filename)
         polling_handler.setLevel(logging.DEBUG)
@@ -65,12 +81,10 @@ class PeckingTest(GoNoGoInterrupt):
 
     def config_playback_log(self):
 
-        if "log_playback_file" in self.parameters:
-            filename = os.path.join(self.parameters["experiment_path"],
-                                    self.parameters["log_playback_file"])
-        else:
-            filename = os.path.join(self.parameters["experiment_path"],
-                                    "audio_playback.log")
+        filename = self.parameters.get("log_playback_file",
+                                       "audio_playback.log")
+        if len(os.path.split(filename)[0]) == 0:
+            filename = os.path.join(self.experiment_path, filename)
 
         playback_handler = logging.FileHandler(filename)
         playback_handler.setLevel(logging.DEBUG)
@@ -87,26 +101,12 @@ class PeckingTest(GoNoGoInterrupt):
             if handler.level < logger.level:
                 handler.setLevel(logger.level)
 
-    def check_session_schedule(self):
-        """
-        We don't use any session scheduling, so always return True.
-        """
-
-        return True
-
-    def check_light_schedule(self):
-        """
-        We don't run experiments based on light-dark schedules, so always return True.
-        """
-
-        return True
-
     def save(self):
         """
         Save the experiment parameters
         """
 
-        self.snapshot_f = os.path.join(self.parameters["experiment_path"],
+        self.snapshot_f = os.path.join(self.experiment_path,
                                        "configuration.yaml")
         logger.debug("Saving configurations as %s" % self.snapshot_f)
         configure.ConfigureYAML.save(self.parameters,
@@ -119,13 +119,11 @@ class PeckingTest(GoNoGoInterrupt):
         :return:
         """
 
-        self.this_trial.reward = True
-        logger.debug("reward_main")
-        value = self.parameters['reward_value']
-        logger.info("Supplying reward for %3.2f seconds" % value)
-        reward_event = self.panel.reward(value=value)
-        if isinstance(reward_event, dt.datetime): # There was a response during the reward period
-            self.this_trial.reward = False # maybe use reward_event here instead?
+        logger.info("Supplying reward for %3.2f seconds" % self.reward_value)
+        reward_event = self.panel.reward(value=self.reward_value)
+        # There was a response during the reward period
+        if isinstance(reward_event, dt.datetime):
+            self.this_trial.reward = False  # maybe use reward_event here instead?
             self.start_immediately = True
 
 
@@ -136,7 +134,11 @@ def run_pecking_test(args):
 
     print "Called run_pecking_test"
     box_name = "Box%d" % args.box
+<<<<<<< HEAD
     config_dir = os.path.expanduser("~/configs")
+=======
+    config_dir = os.path.expanduser(os.path.join("~", "configs"))
+>>>>>>> pydaqmx
 
     # Load config file
     if args.config is not None:

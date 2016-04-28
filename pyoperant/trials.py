@@ -1,50 +1,111 @@
 import logging
-from pyoperant import queues, utils
+import datetime as dt
+from pyoperant import EndSession
+from pyoperant.events import events
 
 logger = logging.getLogger(__name__)
 
-class Trial(utils.Event):
-    """docstring for Trial"""
+
+class Trial(object):
+    """ Class that implements all basic functionality of a trial
+
+    Parameters
+    ----------
+    index: int
+        Index of the trial
+    experiment: instance of Experiment class
+        The experiment of which this trial is a part
+    block: instance of Block class
+        The block that generated this trial
+    condition: instance of StimulusCondition
+        The condition for the current trial. Provides the trial with a stimulus,
+        as well as reinforcement instructions
+
+    Attributes
+    ----------
+    index: int
+        Index of the trial
+    experiment: instance of Experiment class
+        The experiment of which this trial is a part
+    stimulus_condition: instance of StimulusCondition
+        The condition for the current trial. Provides the trial with a stimulus,
+        as well as reinforcement instructions
+    time: datetime
+        The time the trial started
+    session: int
+        Index of the current session
+
+    Methods
+    -------
+    run() - Runs the trial
+    annotate() - Annotates the trial with key-value pairs
+    """
     def __init__(self,
                  index=None,
                  experiment=None,
-                 stimulus_condition=None,
+                 condition=None,
+                 block=None,
                  *args, **kwargs):
 
         super(Trial, self).__init__(*args, **kwargs)
-        self.label = 'trial'
-        self.index = index
 
         # Object references
         self.experiment = experiment
-        self.condition = stimulus_condition
+        self.condition = condition
+        self.block = block
+        self.annotations = dict()
 
-        # Trial statistics
+        # Trial properties
+        self.index = index
+        self.session = self.experiment.session_id
+        self.time = None  # Set just after trial_pre
+
+        # Likely trial details
         self.stimulus = None
         self.response = None
-        self.correct = None
         self.rt = None
+        self.correct = False
         self.reward = False
         self.punish = False
 
+        # Trial event information
+        self.event = dict(name="Trial",
+                          action="",
+                          metadata="")
+
+    def annotate(self, **annotations):
+        """ Annotate the trial with key-value pairs """
+
+        self.annotations.update(annotations)
+
     def run(self):
-        """
-        This is where the basic trial structure is encoded. The main structure
-        is as follows: Get stimulus -> Initiate trial -> Play stimulus ->
-        Receive response ->  Consequate response -> Finish trial -> Save data.
+        """ Runs the trial
+
+        Summary
+        -------
+        The main structure is as follows:
+
+        Get stimulus -> Initiate trial -> Play stimulus -> Receive response ->
+        Consequate response -> Finish trial -> Save data.
+
         The stimulus, response and consequate stages are broken into pre, main,
-        and post stages. This seems a bit too subdivided, and it may be, but a
-        pre and post stage allow for a clean place to put delays between stages.
+        and post stages. Only use the stages you need in your experiment.
         """
 
         self.experiment.this_trial = self
 
         # Get the stimulus
-        # Currently this doesn't allow for any keyword arguments (e.g. replacement, shuffle)
         self.stimulus = self.condition.get()
 
         # Any pre-trial logging / computations
         self.experiment.trial_pre()
+
+        # Emit trial event
+        self.event.update(action="start", metadata=str(self.index))
+        events.write(self.event)
+
+        # Record the trial time
+        self.time = dt.datetime.now()
 
         # Perform stimulus playback
         self.experiment.stimulus_pre()
@@ -57,33 +118,34 @@ class Trial(utils.Event):
         self.experiment.response_post()
 
         # Consequate the response with a reward, punishment or neither
-        self.experiment.consequate_pre()
-        self.experiment.consequate_main()
-        self.experiment.consequate_post()
+        if self.response == self.condition.response:
+            self.correct = True
+            if self.condition.is_rewarded and self.block.reinforcement.consequate(self):
+                self.reward = True
+                self.experiment.reward_pre()
+                self.experiment.reward_main()
+                self.experiment.reward_post()
+        else:
+            self.correct = False
+            if self.condition.is_punished and self.block.reinforcement.consequate(self):
+                self.punish = True
+                self.experiment.punish_pre()
+                self.experiment.punish_main()
+                self.experiment.punish_post()
+
+        # Emit trial end event
+        self.event.update(action="end", metadata=str(self.index))
+        events.write(self.event)
 
         # Finalize trial
         self.experiment.trial_post()
 
         # Store trial data
-        self.experiment.subject.store_data()
+        self.experiment.subject.store_data(self)
 
+        # Update session schedulers
+        self.experiment.session.update()
 
-class TrialHandler(queues.BaseHandler):
-
-    def __init__(self, block):
-
-        super(TrialHandler, self).__init__(queue=block.queue,
-                                           items=block.conditions,
-                                           weights=block.weights,
-                                           queue_parameters=block.queue_parameters)
-        self.block = block
-        self.trial_index = 0
-
-    def __iter__(self):
-
-        for condition in self.queue:
-            self.trial_index += 1
-            trial = Trial(index=self.trial_index,
-                          experiment=self.block.experiment,
-                          stimulus_condition=condition)
-            yield trial
+        if self.experiment.check_session_schedule() is False:
+            logger.debug("Session has run long enough. Ending")
+            raise EndSession

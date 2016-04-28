@@ -1,0 +1,37 @@
+---
+# Experiment description
+name: Simple Stimulus Playback
+description: >
+    Loops through a directory of stimuli and plays them back, with some intertrial interval
+experimenter:
+    name: Theunissen Lab
+debug: true
+num_sessions: 1
+experiment_path: "C:/DATA/pyoperant/test"
+
+max_trials: 40
+
+# Behavior properties
+intertrial_interval: [0.5, 1.5]
+stimulus_directory:
+  - name: srch
+    directory: "C:/DATA/stimuli/April_2016_expt/BirdDC25"
+
+# Additional configuration
+subject_name: ColCol0000M
+panel: !!python/object/apply:pyoperant.tlab.local_chronic.Panel131 {}
+
+# Log handler setup
+# Possible values are stream, file, email
+log_handlers:
+    # stream's only option is level. Overrides "debug" parameter for logging
+    # level can either be logging.DEBUG or logging.INFO
+    stream:
+        level: !!python/name:logging.DEBUG
+    # file takes options of
+    # filename: a file under experiment_path
+    # level: a python logging level, written as "!!python/name:logging.LEVEL"
+    file:
+        filename: "experiment.log"
+        level: !!python/name:logging.DEBUG
+...
