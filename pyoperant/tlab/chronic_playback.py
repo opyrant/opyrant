@@ -1,5 +1,6 @@
 import os
 import re
+import hashlib
 import logging
 import datetime as dt
 import numpy as np
@@ -35,8 +36,10 @@ class ChronicPlayback(simple_stimulus_playback.SimpleStimulusPlayback):
         # if len(m) > 0:
         #     name = "%04d" % int(m[0])
         # else:
-        #     name = fname[:4]
-
+        #     logger.warning("Stimulus file should be numbered! %s" % filename)
+        #     filename = os.path.splitext(filename)[0]
+        #     name = filename.ljust(4)[-4:]
+        
         # Get the trial index as a string
         trial_index = "%04d" % self.this_trial.index
 

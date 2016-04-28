@@ -13,7 +13,11 @@ max_trials: 10
 
 # Behavior properties
 intertrial_interval: [0.5, 1.5]
-stimulus_directory: "C:/DATA/stimuli/srch"
+stimulus_directory:
+  - name: test
+    directory: "C:/DATA/stimuli/stim_test"
+  - name: srch
+    directory: "C:/DATA/stimuli/srch"
 
 # Additional configuration
 subject_name: ColCol0000M

@@ -1,6 +1,8 @@
 import time
 import datetime
 import logging
+import wave
+import numpy as np
 from pyoperant import InterfaceError
 
 logger = logging.getLogger(__name__)
