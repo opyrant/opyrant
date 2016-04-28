@@ -30,12 +30,15 @@ class ChronicPlayback(simple_stimulus_playback.SimpleStimulusPlayback):
         repetition = "%04d" % repetition
 
         # Get the digits in the filename or choose the first 4.
-        filename = os.path.basename(self.this_trial.stimulus.file_origin)
-        m = re.findall("\d+", filename)
-        if len(m) > 0:
-            name = "%04d" % int(m[0])
-        else:
-            name = fname[:4]
+        # filename = os.path.basename(self.this_trial.stimulus.file_origin)
+        # m = re.findall("\d+", filename)
+        # if len(m) > 0:
+        #     name = "%04d" % int(m[0])
+        # else:
+        #     name = fname[:4]
+
+        # Get the trial index as a string
+        trial_index = "%04d" % self.this_trial.index
 
         # Get the md5 hash
         md5 = hashlib.md5()
@@ -43,7 +46,7 @@ class ChronicPlayback(simple_stimulus_playback.SimpleStimulusPlayback):
             md5.update(fh.read())
         md5 = str(md5.hexdigest())
 
-        metadata = "".join([repetition, name, md5])
+        metadata = "".join([repetition, trial_index, md5])
 
         self.panel.speaker.queue(self.this_trial.stimulus.file_origin,
                                  metadata=metadata)
