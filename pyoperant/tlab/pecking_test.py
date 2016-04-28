@@ -134,11 +134,7 @@ def run_pecking_test(args):
 
     print "Called run_pecking_test"
     box_name = "Box%d" % args.box
-<<<<<<< HEAD
-    config_dir = os.path.expanduser("~/configs")
-=======
     config_dir = os.path.expanduser(os.path.join("~", "configs"))
->>>>>>> pydaqmx
 
     # Load config file
     if args.config is not None:

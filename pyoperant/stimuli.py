@@ -116,7 +116,7 @@ class StimulusCondition(object):
                                   file_path="/path/to/stimulus_directory",
                                   recursive=True,
                                   file_pattern="*.wav",
-                                  replacement=True)
+                                  replacement=False)
 
     # Get a wavefile
     wavefile = condition.get()
@@ -124,7 +124,7 @@ class StimulusCondition(object):
 
     def __init__(self, name="", response=None, is_rewarded=True,
                  is_punished=True, files=None, file_path="", recursive=False,
-                 file_pattern="*", shuffle=True, replacement=True):
+                 file_pattern="*", shuffle=True, replacement=False):
 
         # These should do something better than printing and returning
         if files is None:
