@@ -362,6 +362,11 @@ class BaseExp(object):
 
         Parameters
         ----------
+        filename
+        format
+        component
+
+        TODO: If one already exists, don't create another!
 
         """
 
