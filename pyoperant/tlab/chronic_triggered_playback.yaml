@@ -1,6 +1,6 @@
 ---
 # Experiment description
-name: Simple Stimulus Playback
+name: Simple Triggered Stimulus Playback
 description: >
     Loops through a directory of stimuli and plays them back, with some intertrial interval
 experimenter:
@@ -12,14 +12,14 @@ experiment_path: "C:/DATA/pyoperant/HpiGre8003"
 max_trials: 40
 
 # Behavior properties
-intertrial_interval: [3.5, 6.5]
+intertrial_interval: 0.1
 stimulus_directory:
   - name: srch
-    directory: "C:/DATA/stimuli/April_2016_expt/Probe"
+    directory: "C:/DATA/stimuli/HPG8003/RepertoireSingleFS25k"
 
 # Additional configuration
 subject_name: HpiGre8003
-panel: !!python/object/apply:pyoperant.tlab.local_chronic.Panel131 {}
+panel: !!python/object/apply:pyoperant.tlab.local_chronic.PanelWithInput {}
 
 # Log handler setup
 # Possible values are stream, file, email

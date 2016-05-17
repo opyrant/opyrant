@@ -229,6 +229,48 @@ class Hopper(BaseComponent):
         return self.feed(dur=value)
 
 
+class Button(BaseComponent):
+    """ Class which holds information about buttons with an input but no output.
+    Could also describe a perch.
+
+    Parameters
+    ----------
+    IR : hwio.BooleanInput
+        input channel for the IR beam to check for a peck
+
+    Attributes
+    ----------
+    IR : hwio.BooleanInput
+        input channel for the IR beam to check for a peck
+    """
+    def __init__(self, IR, *args, **kwargs):
+        super(Button, self).__init__(*args, **kwargs)
+        if isinstance(IR, hwio.BooleanInput):
+            self.IR = IR
+        else:
+            raise ValueError('%s is not an input channel' % IR)
+
+    def status(self):
+        """ Reads the status of the IR beam
+
+        Returns
+        -------
+        bool
+            True if beam is broken
+        """
+        return self.IR.read()
+
+    def poll(self, timeout=None):
+        """ Polls the peck port until there is a peck
+
+        Returns
+        -------
+        datetime
+            Timestamp of the IR beam being broken.
+        """
+        return self.IR.poll(timeout=timeout)
+
+
 ## Peck Port ##
 class PeckPort(BaseComponent):
     """ Class which holds information about peck ports

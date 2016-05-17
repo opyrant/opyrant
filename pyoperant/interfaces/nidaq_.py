@@ -1,3 +1,5 @@
+import time
+import datetime
 import logging
 import numpy as np
 import nidaqmx
@@ -40,7 +42,7 @@ def list_boolean_inputs():
 
     channels = dict()
     for dev in nidaqmx.System().devices:
-        channels[str(dev)] = dev.get_digital_input_channels()
+        channels[str(dev)] = dev.get_digital_input_lines()
 
     return channels
 
@@ -50,7 +52,7 @@ def list_boolean_outputs():
 
     channels = dict()
     for dev in nidaqmx.System().devices:
-        channels[str(dev)] = dev.get_digital_output_channels()
+        channels[str(dev)] = dev.get_digital_output_lines()
 
     return channels
 
@@ -132,7 +134,7 @@ class NIDAQmxInterface(base_.BaseInterface):
     """
 
     def __init__(self, device_name, samplerate=30000,
-                 analog_event_handler=None, clock_channel=None,
+                 analog_event_handler=None, clock_channel="OnboardClock",
                  *args, **kwargs):
         super(NIDAQmxInterface, self).__init__(*args, **kwargs)
         self.device_name = device_name
@@ -178,8 +180,10 @@ class NIDAQmxInterface(base_.BaseInterface):
         task = nidaqmx.DigitalInputTask()
         task.create_channel(channel)
         task.configure_timing_sample_clock(source=self.clock_channel,
-                                           rate=self.samplerate)
-        task.set_buffer_size(0)
+                                           rate=self.samplerate,
+                                           sample_mode="continuous")
+        task.set_read_relative_to("most_recent")
+        task.set_read_offset(-1)
         self.tasks[channel] = task
 
     def _config_write(self, channel, **kwargs):
@@ -224,9 +228,15 @@ class NIDAQmxInterface(base_.BaseInterface):
             raise NIDAQmxError("Channel(s) %s not yet configured" % str(channel))
 
         task = self.tasks[channel]
-        value = task.read()
+        task.start()
+        # while task.get_samples_per_channel_acquired() == 0:
+        #     pass
+        value, bits_per_sample = task.read(1)
+        value = value[0, 0]
+        task.stop()
         if invert:
             value = 1 - value
+        value = bool(value == 1)
         if value:
             events.write(event)
 
@@ -255,6 +265,72 @@ class NIDAQmxInterface(base_.BaseInterface):
         task.write(value, auto_start=True)
 
         return True
+
+    def _poll(self, channel=None, invert=False,
+              last_value=False, suppress_longpress=False,
+              timeout=None, wait=None, event=None, *args, **kwargs):
+        """ Runs a loop, querying for the boolean input to return True.
+
+        Parameters
+        ----------
+        channel:
+            default channel argument to pass to _read_bool()
+        invert: bool
+            whether or not to invert the read value
+        last_value: bool
+            if the last read value was True. Necessary to suppress longpresses
+        suppress_longpress: bool
+            if True, attempts to suppress returning immediately if the button is still being pressed since the last call. If last_value is True, then it waits until the interface reads a single False value before allowing it to return.
+        timeout: float
+            the time, in seconds, until polling times out. Defaults to no timeout.
+        wait: float
+            the time, in seconds, to wait between subsequent reads (default no wait).
+
+        Returns
+        -------
+        timestamp of True read or None if timed out
+        """
+
+        logger.debug("Begin polling from device %s" % self.device_name)
+        if timeout is not None:
+            start = time.time()
+
+        if channel not in self.tasks:
+            raise NIDAQmxError("Channel(s) %s not yet configured" % str(channel))
+
+        task = self.tasks[channel]
+        task.start()
+        while True:
+            # Read the value - cannot use _read_bool because it must start and stop the task each time.
+            value, bits_per_sample = task.read(1)
+            value = value[0, 0]
+            if invert:
+                value = 1 - value
+            value = bool(value == 1)
+            if value:
+                events.write(event)
+
+            if not isinstance(value, bool):
+                task.stop()
+                raise ValueError("Polling for bool returned something that was not a bool")
+            if value is True:
+
+                if (last_value is False) or (suppress_longpress is False):
+                    logger.debug("Input detected. Returning")
+                    task.stop()
+                    return datetime.datetime.now()
+            else:
+                last_value = False
+
+            if timeout is not None:
+                if time.time() - start >= timeout:
+                    logger.debug("Polling timed out. Returning")
+                    task.stop()
+                    return None
+
+            if wait is not None:
+                utils.wait(wait)
+
 
     def _config_read_analog(self, channel, min_val=-10.0, max_val=10.0,
                             **kwargs):

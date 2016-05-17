@@ -27,7 +27,8 @@ class BaseInterface(object):
 
     def _poll(self, channel=None, subdevices=None, invert=False,
               last_value=False, suppress_longpress=False,
-              timeout=None, wait=None, *args, **kwargs):
+              timeout=None, wait=None, event=None,
+              *args, **kwargs):
         """ Runs a loop, querying for the boolean input to return True.
 
         Parameters
@@ -46,6 +47,8 @@ class BaseInterface(object):
             the time, in seconds, until polling times out. Defaults to no timeout.
         wait: float
             the time, in seconds, to wait between subsequent reads (default no wait).
+        event: dict
+            a dictionary of event information to emit just before writing
 
         Returns
         -------
@@ -59,6 +62,7 @@ class BaseInterface(object):
             value = self._read_bool(channel=channel,
                                    subdevices=subdevices,
                                    invert=invert,
+                                   event=event,
                                    *args, **kwargs)
             if not isinstance(value, bool):
                 raise ValueError("Polling for bool returned something that was not a bool")
