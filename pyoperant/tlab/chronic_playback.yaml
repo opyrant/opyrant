@@ -9,15 +9,13 @@ debug: true
 num_sessions: 1
 experiment_path: "C:/DATA/pyoperant/test"
 
-max_trials: 10
+max_trials: 40
 
 # Behavior properties
 intertrial_interval: [0.5, 1.5]
 stimulus_directory:
-  - name: test
-    directory: "C:/DATA/stimuli/stim_test"
   - name: srch
-    directory: "C:/DATA/stimuli/srch"
+    directory: "C:/DATA/stimuli/April_2016_expt/BirdDC25"
 
 # Additional configuration
 subject_name: ColCol0000M
