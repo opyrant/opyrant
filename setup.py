@@ -11,19 +11,15 @@ comedi_poll = Extension('comedi_poll',
                     sources = ['src/comedi_poll.c'])
 
 setup(
-    name = 'pyoperant',
+    name = 'opyrant',
     version = '0.1.2',
     author = 'Justin Kiggins',
     author_email = 'justin.kiggins@gmail.com',
     description = 'hardware interface and controls for operant conditioning',
     long_description = open('docs/README.rst', 'rt').read(),
-    packages = ['pyoperant'],
+    packages = ['opyrant'],
     requires = ['pyephem','numpy'],
-    scripts = [
-        'scripts/behave',
-        'scripts/pyoperantctl',
-        'scripts/allsummary.py',
-        ],
+
     license = "GNU Affero General Public License v3",
     classifiers = [
         "Development Status :: 4 - Beta",
