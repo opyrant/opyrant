@@ -10,4 +10,7 @@ Development Lead
 Contributors
 ------------
 
+* Marvin Thielk
+* Tyler Lee
+
 None yet. Why not be the first?
